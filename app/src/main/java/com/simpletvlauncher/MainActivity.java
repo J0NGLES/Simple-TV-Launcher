@@ -133,6 +133,7 @@ public class MainActivity extends Activity {
                 @Override public void onInputAdded(String id) { updateInputsRow(); }
                 @Override public void onInputRemoved(String id) { updateInputsRow(); }
                 @Override public void onInputUpdated(String id) { updateInputsRow(); }
+                @Override public void onTvInputInfoUpdated(android.media.tv.TvInputInfo info) { updateInputsRow(); }
                 @Override public void onInputStateChanged(String id, int state) { updateInputsRow(); }
             };
     private final Map<View, RectF> slots = new HashMap<>();
@@ -1645,6 +1646,7 @@ public class MainActivity extends Activity {
                 GlassView tile = glass(22 * s, sourceIcon(input, label), label);
                 tile.title = label;
                 tile.setContentDescription(label);
+                if (prefs.dimInactiveInputs() && isInactiveInput(input)) tile.iconColor = 0x78FFFFFF;
                 tile.setTag(id);
                 tile.frosted = true;
                 tile.setOnClickListener(v -> openInput(id));
@@ -1664,6 +1666,21 @@ public class MainActivity extends Activity {
             if (!(current instanceof GlassView)) setShelf("");
         }
         if (current instanceof GlassView) onFocused(current);
+    }
+
+    private boolean isInactiveInput(android.media.tv.TvInputInfo input) {
+        android.media.tv.TvInputManager manager = observedInputManager;
+        if (manager == null) return false;
+        // A CEC device can report a different state from the physical HDMI port.
+        String parentId = input.getParentId();
+        String id = parentId != null && manager.getTvInputInfo(parentId) != null ? parentId : input.getId();
+        try {
+            int state = manager.getInputState(id);
+            return state == android.media.tv.TvInputManager.INPUT_STATE_CONNECTED_STANDBY
+                    || state == android.media.tv.TvInputManager.INPUT_STATE_DISCONNECTED;
+        } catch (IllegalArgumentException e) {
+            return false; // The input may have disappeared while the row was being built.
+        }
     }
 
     private void openInput(String id) {

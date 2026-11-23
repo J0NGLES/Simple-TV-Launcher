@@ -145,6 +145,7 @@ public class SettingsActivity extends Activity {
         toggle(L.t("Кнопка поиска вверху"), prefs::showSearchBtn, prefs::setShowSearchBtn);
         toggle(L.t("Кнопка выбора источника сигнала"), prefs::showSourceBtn, prefs::setShowSourceBtn);
         toggle(L.t("Ряд источников сигнала на главном экране"), prefs::showInputsRow, prefs::setShowInputsRow);
+        toggle(L.t("Приглушать неактивные источники сигнала"), prefs::dimInactiveInputs, prefs::setDimInactiveInputs);
         toggle(L.t("Значок VPN вверху"), prefs::showVpnBtn, prefs::setShowVpnBtn);
         toggle(L.t("Значок сети вверху"), prefs::showNetBtn, prefs::setShowNetBtn);
         toggle(L.t("Шестерня системных настроек вверху"), prefs::showGearBtn, prefs::setShowGearBtn);
