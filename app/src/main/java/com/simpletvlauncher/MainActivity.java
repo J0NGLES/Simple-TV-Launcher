@@ -1477,6 +1477,7 @@ public class MainActivity extends Activity {
     /** Кнопка «Источник» нужна только телевизору: у приставки нет входных портов (HDMI/AV/антенна). */
     private void refreshInputs() {
         inputs.clear();
+        inputSubtitles.clear();
         try {
             android.media.tv.TvInputManager tm = (android.media.tv.TvInputManager) getSystemService(Context.TV_INPUT_SERVICE);
             if (tm != null) {
@@ -1492,7 +1493,8 @@ public class MainActivity extends Activity {
                 inputLabel.clear();
                 for (android.media.tv.TvInputInfo i : all) {
                     if (!i.isPassthroughInput() || parents.contains(i.getId())) continue;
-                    String lb = rawLabel(i);
+                    String reportedLabel = labelById.get(i.getId());
+                    String lb = reportedLabel;
                     // у входа подключённого устройства название бывает пустым или «null» — тогда берём название порта (HDMI 1…)
                     if (lb.isEmpty() && i.getParentId() != null) lb = labelById.get(i.getParentId()) == null ? "" : labelById.get(i.getParentId());
                     if (lb.isEmpty()) continue;
@@ -1512,6 +1514,10 @@ public class MainActivity extends Activity {
                     int num = hdmi ? hdmiNumber(i, lb, labelById.get(i.getParentId()), base) : portNumber(base, i.getId());
                     if (hdmi && num != 1000) lb = "HDMI " + num;        // названия, заданные в самом ТВ («Xbox», «Приставка»…), не используем
                     inputLabel.put(i.getId(), lb);
+                    if (hdmi) {
+                        String subtitle = hdmiSubtitle(tm, i, lb, reportedLabel, labelById.get(i.getParentId()));
+                        if (subtitle != null) inputSubtitles.put(i.getId(), subtitle);
+                    }
                     inputOrder.put(i.getId(), num);
                 }
                 // HDMI по возрастанию номера порта, под ними AV (тоже по порядку)
@@ -1527,6 +1533,7 @@ public class MainActivity extends Activity {
     }
 
     private final java.util.Map<String, String> inputLabel = new java.util.HashMap<>();
+    private final java.util.Map<String, String> inputSubtitles = new java.util.HashMap<>();
     private final java.util.Map<String, Integer> inputOrder = new java.util.HashMap<>();
 
     /** Номер в названии («HDMI 2» → 2); нет — число в конце идентификатора («…/HW5» → 5); иначе в конец списка. */
@@ -1564,6 +1571,31 @@ public class MainActivity extends Activity {
         if (cs == null || cs.length() == 0) { try { cs = in.loadLabel(this); } catch (Throwable ignored) {} }
         String s = cs == null ? "" : cs.toString().trim();
         return s.equalsIgnoreCase("null") ? "" : s;
+    }
+
+    private String hdmiSubtitle(android.media.tv.TvInputManager manager, android.media.tv.TvInputInfo input,
+                                String portLabel, String reportedLabel, String parentLabel) {
+        String parentId = input.getParentId();
+        if (parentId != null && !reportedLabel.equalsIgnoreCase(parentLabel)
+                && !reportedLabel.matches("(?i)(Playback|Recorder|Tuner|Device)_?[0-9]+")
+                && !reportedLabel.isEmpty() && !reportedLabel.equalsIgnoreCase(portLabel)) {
+            return reportedLabel;
+        }
+        String custom = customInputSubtitle(input, portLabel);
+        if (custom != null || parentId == null) return custom;
+        return customInputSubtitle(manager.getTvInputInfo(parentId), portLabel);
+    }
+
+    private String customInputSubtitle(android.media.tv.TvInputInfo input, String portLabel) {
+        if (input == null) return null;
+        try {
+            CharSequence label = input.loadCustomLabel(this);
+            if (label == null) return null;
+            String name = label.toString().trim();
+            return name.isEmpty() || name.equalsIgnoreCase("null") || name.equalsIgnoreCase(portLabel) ? null : name;
+        } catch (SecurityException e) {
+            return null;
+        }
     }
 
     private boolean showSource() {
@@ -1645,8 +1677,10 @@ public class MainActivity extends Activity {
                 String label = inputLabel.get(id);
                 GlassView tile = glass(22 * s, sourceIcon(input, label), label);
                 tile.title = label;
-                tile.setContentDescription(label);
-                if (prefs.dimInactiveInputs() && isInactiveInput(input)) tile.iconColor = 0x78FFFFFF;
+                String subtitle = inputSubtitles.get(id);
+                tile.subtitle = inputSubtitles.isEmpty() ? null : inputSubtitles.getOrDefault(id, "");
+                tile.setContentDescription(subtitle == null ? label : label + ", " + subtitle);
+                tile.dim = prefs.dimInactiveInputs() && isInactiveInput(input);
                 tile.setTag(id);
                 tile.frosted = true;
                 tile.setOnClickListener(v -> openInput(id));

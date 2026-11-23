@@ -26,7 +26,7 @@ public class GlassView extends View {
 
     public float radius = 20;
     public int icon;                 // Icons.*
-    public String label, value, hint, title;
+    public String label, subtitle, value, hint, title;
     public Drawable appIcon;         // для строк списка
     public boolean left;             // строка списка: текст слева, значение справа
     public boolean floating;         // фокус рисует плавающая подсветка, не сама плитка
@@ -260,6 +260,12 @@ public class GlassView extends View {
                 vw += 2 * r + pad * 0.55f;
             }
             text(c, label, x, h * 0.64f, h * 0.36f, dk ? 0xFF1B1B22 : 0xF2FFFFFF, 2, Paint.Align.LEFT, w - x - vw - pad);
+            return;
+        }
+        if (subtitle != null) {
+            if (icon != 0) Icons.draw(c, icon, w / 2f, h * 0.27f, h * 0.19f, p, ic);
+            text(c, label, w / 2f, h * 0.64f, h * 0.21f, dk ? 0xFF1B1B22 : 0xE6FFFFFF, 1, Paint.Align.CENTER, w * 0.94f);
+            text(c, subtitle, w / 2f, h * 0.86f, h * 0.17f, dk ? 0xFF42424A : 0xDEFFFFFF, 1, Paint.Align.CENTER, w * 0.94f);
             return;
         }
         if (icon != 0) {
