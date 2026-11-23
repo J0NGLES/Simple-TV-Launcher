@@ -1672,15 +1672,16 @@ public class MainActivity extends Activity {
         GlassView restoreFocus = null;
         if (prefs.showInputsRow()) {
             refreshInputs();
+            boolean showSubtitles = !inputSubtitles.isEmpty();
             for (android.media.tv.TvInputInfo input : inputs) {
                 final String id = input.getId();
                 String label = inputLabel.get(id);
                 GlassView tile = glass(22 * s, sourceIcon(input, label), label);
-                tile.title = label;
                 String subtitle = inputSubtitles.get(id);
-                tile.subtitle = inputSubtitles.isEmpty() ? null : inputSubtitles.getOrDefault(id, "");
+                tile.title = subtitle == null ? label : label + " · " + subtitle;
                 tile.setContentDescription(subtitle == null ? label : label + ", " + subtitle);
-                tile.dim = prefs.dimInactiveInputs() && isInactiveInput(input);
+                boolean inactive = prefs.dimInactiveInputs() && isInactiveInput(input);
+                tile.painter = (canvas, view) -> drawInputTile(canvas, view, subtitle, showSubtitles, inactive);
                 tile.setTag(id);
                 tile.frosted = true;
                 tile.setOnClickListener(v -> openInput(id));
@@ -1700,6 +1701,23 @@ public class MainActivity extends Activity {
             if (!(current instanceof GlassView)) setShelf("");
         }
         if (current instanceof GlassView) onFocused(current);
+    }
+
+    private static void drawInputTile(Canvas canvas, GlassView tile, String subtitle, boolean showSubtitles,
+                                      boolean inactive) {
+        float w = tile.getWidth();
+        float h = tile.getHeight();
+        int foreground = tile.isFocused() ? 0xFF1B1B22 : 0xFFFFFFFF;
+        int iconColor = ColorUtil.alpha(foreground, inactive ? 120 : 255);
+        int labelColor = ColorUtil.alpha(foreground, inactive ? 184 : 245);
+        int subtitleColor = ColorUtil.alpha(foreground, inactive ? 164 : 222);
+        Icons.draw(canvas, tile.icon, w / 2, h * (showSubtitles ? 0.27f : 0.34f),
+                h * (showSubtitles ? 0.19f : 0.25f), tile.p, iconColor);
+        tile.text(canvas, tile.label, w / 2, h * (showSubtitles ? 0.64f : 0.86f),
+                h * (showSubtitles ? 0.21f : 0.26f), labelColor, 1, Paint.Align.CENTER, w * 0.90f);
+        if (subtitle != null) {
+            tile.text(canvas, subtitle, w / 2, h * 0.86f, h * 0.17f, subtitleColor, 1, Paint.Align.CENTER, w * 0.90f);
+        }
     }
 
     private boolean isInactiveInput(android.media.tv.TvInputInfo input) {
