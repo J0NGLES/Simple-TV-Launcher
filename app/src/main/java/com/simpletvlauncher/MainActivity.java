@@ -122,10 +122,19 @@ public class MainActivity extends Activity {
         }
     }
     private final GlassView[] setTiles = new GlassView[SET_COUNT];
-    private TextView clock, dateTv, shelfTitle, appsHdr, setHdr;
+    private TextView clock, dateTv, shelfTitle, appsHdr, inputsHdr, setHdr;
 
     private List<AppRepo.AppItem> all = new ArrayList<>(), visible = new ArrayList<>();
     private final List<AppTile> tiles = new ArrayList<>();
+    private final List<GlassView> inputTiles = new ArrayList<>();
+    private android.media.tv.TvInputManager observedInputManager;
+    private final android.media.tv.TvInputManager.TvInputCallback inputCallback =
+            new android.media.tv.TvInputManager.TvInputCallback() {
+                @Override public void onInputAdded(String id) { updateInputsRow(); }
+                @Override public void onInputRemoved(String id) { updateInputsRow(); }
+                @Override public void onInputUpdated(String id) { updateInputsRow(); }
+                @Override public void onInputStateChanged(String id, int state) { updateInputsRow(); }
+            };
     private final Map<View, RectF> slots = new HashMap<>();
     private final Handler h = new Handler(Looper.getMainLooper());
 
@@ -364,6 +373,11 @@ public class MainActivity extends Activity {
             applyPrefs();
             if (!all.isEmpty()) applyApps();
         }
+        if (prefs.showInputsRow()) {
+            observedInputManager = (android.media.tv.TvInputManager) getSystemService(Context.TV_INPUT_SERVICE);
+            if (observedInputManager != null) observedInputManager.registerCallback(inputCallback, h);
+        }
+        if (prefs.showInputsRow() || !inputTiles.isEmpty()) updateInputsRow();
         applyBackground();
         bg.syncLook();
         h.removeCallbacks(tick);        // onPause останавливает часы, а onStart после короткой паузы не вызывается — запускаем их здесь
@@ -445,6 +459,10 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         super.onPause();
         resumed = false;
+        if (observedInputManager != null) {
+            observedInputManager.unregisterCallback(inputCallback);
+            observedInputManager = null;
+        }
         video.pause();
         h.removeCallbacks(netPoll);
         h.removeCallbacks(lateResume);
@@ -539,6 +557,9 @@ public class MainActivity extends Activity {
         rowPitch = th + gap;
     }
 
+    private static final float PANEL_TILE_WIDTH = 300f;
+    private static final float PANEL_TILE_HEIGHT = 104f;
+    private static final float PANEL_TILE_GAP = 24f;
     private static final float BOTTOM_PAD = 50f;     // фиксированный отступ под «Настройками», в условных пикселях
     private static final float END_PAD = 40f;        // отступ под матовой панелью, когда нижней панели «Настройки» нет
 
@@ -774,6 +795,10 @@ public class MainActivity extends Activity {
         appsHdr = UI.text(this, L.t("ПРИЛОЖЕНИЯ"), 21 * s, 0x99FFFFFF, GlassView.MED);
         appsHdr.setLetterSpacing(0.2f);
         placeC(appsHdr, mx, 14 * s, W - 2 * mx, 36 * s);
+        inputsHdr = UI.text(this, L.t("Источник сигнала").toUpperCase(L.locale()), 21 * s, 0x99FFFFFF, GlassView.MED);
+        inputsHdr.setLetterSpacing(0.2f);
+        inputsHdr.setVisibility(View.GONE);
+        placeC(inputsHdr, mx, 0, 600 * s, 36 * s);
         setHdr = UI.text(this, L.t("НАСТРОЙКИ"), 21 * s, 0x99FFFFFF, GlassView.MED);
         setHdr.setLetterSpacing(0.2f);
         placeC(setHdr, mx, 500 * s, W - 2 * mx, 36 * s);
@@ -788,7 +813,7 @@ public class MainActivity extends Activity {
             GlassView g = glass(22 * s, icons[i], labels[i]);
             g.title = titles[i];
             g.frosted = true;
-            placeC(g, mx + i * (324 * s), 550 * s, 300 * s, 104 * s);
+            placeC(g, mx + i * (PANEL_TILE_WIDTH + PANEL_TILE_GAP) * s, 550 * s, PANEL_TILE_WIDTH * s, PANEL_TILE_HEIGHT * s);
             g.setOnClickListener(v -> onPanelTile(idx));
             setTiles[i] = g;
         }
@@ -841,9 +866,9 @@ public class MainActivity extends Activity {
     private void layoutContent() {
         int n = visible.size();
         int rows = Math.max(1, (n + cols - 1) / cols);
-        float gridEnd = gridTop() + rows * rowPitch - gap;
+        float sectionsBottom = gridTop() + rows * rowPitch - gap + 34 * s;
         // матовая панель за сеткой
-        float px = mx - 30 * s, py = 62 * s, pw = W - 2 * mx + 60 * s, ph = gridEnd + 34 * s - py;
+        float px = mx - 30 * s, py = 62 * s, pw = W - 2 * mx + 60 * s;
         final boolean ctr = prefs.gridAlign() == 1;
         if ((ctr || gridOff > 0.5f) && n > 0) {         // панель не шире самого длинного ряда: пустого стекла по бокам нет
             pw = (Math.min(cols, n) - 1) * pitch + tw + 60 * s;
@@ -854,11 +879,33 @@ public class MainActivity extends Activity {
         fl.leftMargin = Math.round(px);
         fl.topMargin = Math.round(py);
         fl.width = Math.round(pw);
-        fl.height = Math.round(ph);
+        fl.height = Math.round(sectionsBottom - py);
         frost.radius = 44 * s;
         frost.setLayoutParams(fl);
         frost.setVisibility(View.VISIBLE);
-        float panelY = gridEnd + 34 * s + botGap, hdrY = panelY - 46 * s, panelH = 104 * s;
+
+        float panelPitch = (PANEL_TILE_WIDTH + PANEL_TILE_GAP) * s;
+        float panelH = PANEL_TILE_HEIGHT * s;
+        boolean showInputs = !inputTiles.isEmpty();
+        boolean showInputHeader = showInputs && prefs.showHdrs();
+        inputsHdr.setVisibility(showInputHeader ? View.VISIBLE : View.GONE);
+        if (showInputs) {
+            float tileTop = sectionsBottom + botGap;
+            int inputCols = Math.max(1, (int) ((W - 2 * mx + PANEL_TILE_GAP * s) / panelPitch));
+            float rowSpacing = panelH + PANEL_TILE_GAP * s;
+            for (int rowStart = 0; rowStart < inputTiles.size(); rowStart += inputCols) {
+                int count = Math.min(inputCols, inputTiles.size() - rowStart);
+                float rowWidth = (count - 1) * panelPitch + PANEL_TILE_WIDTH * s;
+                float left = ctr ? (W - rowWidth) / 2f : Math.min(mx + gridOff, W - mx - rowWidth);
+                float y = tileTop + (rowStart / inputCols) * rowSpacing;
+                if (rowStart == 0 && showInputHeader) moveTo(inputsHdr, left, tileTop - 46 * s);
+                for (int column = 0; column < count; column++)
+                    moveTo(inputTiles.get(rowStart + column), left + column * panelPitch, y);
+            }
+            sectionsBottom = tileTop + ((inputTiles.size() - 1) / inputCols) * rowSpacing + panelH;
+        }
+
+        float panelY = sectionsBottom + botGap, hdrY = panelY - 46 * s;
         boolean pt = prefs.panelTop();
         autoTop = 0;
         if (!pt) {
@@ -875,11 +922,11 @@ public class MainActivity extends Activity {
         for (GlassView g : setTiles) show(g, !pt);
         if (pt) {
             // нижней панели нет: ни заголовка, ни кнопок, ни отступа под ними — ниже матовой панели остаётся лишь небольшой край
-            contentH = Math.round(gridEnd + 34 * s + END_PAD * s);
+            contentH = Math.round(sectionsBottom + END_PAD * s);
         } else {
             moveTo(setHdr, mx + gridOff, hdrY);
-            float tx = ctr ? (W - (2 * 324 + 300) * s) / 2f : mx + gridOff;
-            for (int i = 0; i < SET_COUNT; i++) moveTo(setTiles[i], tx + i * (324 * s), panelY);
+            float tx = ctr ? (W - (SET_COUNT - 1) * panelPitch - PANEL_TILE_WIDTH * s) / 2f : mx + gridOff;
+            for (int i = 0; i < SET_COUNT; i++) moveTo(setTiles[i], tx + i * panelPitch, panelY);
             contentH = Math.round(panelY + panelH + BOTTOM_PAD * s);     // фиксированный отступ снизу после «Настроек»
         }
         // ScrollView меряет содержимое без учёта заданной высоты (по самому нижнему элементу), поэтому нижний отступ задаём минимальной высотой
@@ -899,7 +946,7 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------ настройки / данные
     private String sigOf() {
         return prefs.hidden().toString() + prefs.order() + prefs.theme() + prefs.showDate()
-                + prefs.cols() + prefs.bgMode() + prefs.showSourceBtn() + prefs.showSearchBtn() + prefs.showVpnBtn() + prefs.showNetBtn() + prefs.showGearBtn() + prefs.showWeather() + prefs.panelTop()
+                + prefs.cols() + prefs.bgMode() + prefs.showSourceBtn() + prefs.showInputsRow() + prefs.showSearchBtn() + prefs.showVpnBtn() + prefs.showNetBtn() + prefs.showGearBtn() + prefs.showWeather() + prefs.panelTop()
                 + prefs.showTitle() + prefs.showHdrs() + prefs.clock12() + prefs.tileSize() + prefs.gridPin() + prefs.gridAlign() + prefs.glow();
     }
 
@@ -1579,6 +1626,57 @@ public class MainActivity extends Activity {
         return false;
     }
 
+    private void updateInputsRow() {
+        if (!resumed) return;
+        boolean hadInputTiles = !inputTiles.isEmpty();
+        View focused = getCurrentFocus();
+        Object focusedInput = inputTiles.contains(focused) ? focused.getTag() : null;
+        for (GlassView tile : inputTiles) {
+            content.removeView(tile);
+            slots.remove(tile);
+        }
+        inputTiles.clear();
+        GlassView restoreFocus = null;
+        if (prefs.showInputsRow()) {
+            refreshInputs();
+            for (android.media.tv.TvInputInfo input : inputs) {
+                final String id = input.getId();
+                String label = inputLabel.get(id);
+                GlassView tile = glass(22 * s, sourceIcon(input, label), label);
+                tile.title = label;
+                tile.setContentDescription(label);
+                tile.setTag(id);
+                tile.frosted = true;
+                tile.setOnClickListener(v -> openInput(id));
+                placeC(tile, 0, 0, PANEL_TILE_WIDTH * s, PANEL_TILE_HEIGHT * s);
+                inputTiles.add(tile);
+                if (id.equals(focusedInput)) restoreFocus = tile;
+            }
+        }
+        layoutContent();
+        if (restoreFocus != null) restoreFocus.requestFocus();
+        else if (focusedInput != null && !inputTiles.isEmpty()) inputTiles.get(0).requestFocus();
+        else if (focusedInput != null && !tiles.isEmpty()) tiles.get(0).requestFocus();
+        View current = getCurrentFocus();
+        if (hadInputTiles && inputTiles.isEmpty()) {
+            hlGrid.hide();
+            hlGridR.hide();
+            if (!(current instanceof GlassView)) setShelf("");
+        }
+        if (current instanceof GlassView) onFocused(current);
+    }
+
+    private void openInput(String id) {
+        try {
+            Uri uri = android.media.tv.TvContract.buildChannelUriForPassthroughInput(id);
+            startActivity(new Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, android.media.tv.TvContract.Channels.CONTENT_ITEM_TYPE)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (android.content.ActivityNotFoundException | SecurityException e) {
+            android.widget.Toast.makeText(this, L.t("Не удалось переключить источник"), android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void pickSource() {
         if (openSystemSourcePanel()) return;
         refreshInputs();
@@ -1593,14 +1691,8 @@ public class MainActivity extends Activity {
             names[i] = inputLabel.get(in.getId());
             kinds[i] = sourceIcon(in, names[i]);
         }
-        show(GlassDialog.menuIcons(this, L.t("Источник сигнала"), names, kinds, i -> {
-            try {
-                Uri u = android.media.tv.TvContract.buildChannelUriForPassthroughInput(inputs.get(i).getId());
-                startActivity(new Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            } catch (Throwable t) {
-                android.widget.Toast.makeText(this, L.t("Не удалось переключить источник"), android.widget.Toast.LENGTH_SHORT).show();
-            }
-        }));
+        List<android.media.tv.TvInputInfo> choices = new ArrayList<>(inputs);
+        show(GlassDialog.menuIcons(this, L.t("Источник сигнала"), names, kinds, i -> openInput(choices.get(i).getId())));
     }
 
     // ------------------------------------------------------------ погода
