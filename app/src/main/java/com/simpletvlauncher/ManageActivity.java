@@ -23,7 +23,7 @@ import java.util.Set;
 public class ManageActivity extends Activity {
     private Prefs prefs;
     private float s;
-    private boolean manage;
+    private boolean manage, favMode;
     private LinearLayout col;
     private ScrollView sv;
     private TextView sub;
@@ -34,6 +34,7 @@ public class ManageActivity extends Activity {
         prefs = new Prefs(this);
         s = UI.scale(this);
         manage = getIntent().getBooleanExtra("manage", false);
+        favMode = getIntent().getBooleanExtra("fav", false);
         int W = getResources().getDisplayMetrics().widthPixels, H = getResources().getDisplayMetrics().heightPixels;
 
         FrameLayout root = new FrameLayout(this);
@@ -45,27 +46,78 @@ public class ManageActivity extends Activity {
         tl.topMargin = Math.round(50 * s);
         root.addView(title, tl);
 
+        TextView cap = UI.text(this, L.t("Отображение на главном экране"), 22 * s, 0x80FFFFFF, GlassView.REG);
+        cap.setGravity(android.view.Gravity.RIGHT | android.view.Gravity.CENTER_VERTICAL);
+        cap.setPadding(0, 0, Math.round(50 * s), 0);       // правый край — над столбцом «Показано» / «Скрыто»
+        FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(Math.round(W - 192 * s), Math.round(40 * s));
+        cl.leftMargin = Math.round(96 * s);
+        cl.topMargin = Math.round(132 * s);
+        root.addView(cap, cl);
         sub = UI.text(this, "", 26 * s, 0xA6FFFFFF, GlassView.REG);
         FrameLayout.LayoutParams sl = new FrameLayout.LayoutParams(Math.round(W - 192 * s), Math.round(40 * s));
         sl.leftMargin = Math.round(96 * s);
         sl.topMargin = Math.round(132 * s);
         root.addView(sub, sl);
 
-        sv = new ScrollView(this);
+        sv = new Snap(this);
         sv.setVerticalScrollBarEnabled(false);
         sv.setClipChildren(false);
         sv.setClipToPadding(false);
+        // на экране только целые кнопки: список прокручивается ровно на строку, а то, что не помещается целиком, не рисуется
+        sv.getViewTreeObserver().addOnGlobalFocusChangeListener((o, n) -> {
+            if (n == null || n.getParent() != col) return;
+            snapTo(n);       // сразу, до отрисовки: иначе один кадр выбранная строка рисуется вне видимой области
+        });
         col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setClipChildren(false);
         sv.addView(col, new ViewGroup.LayoutParams(-1, -2));
-        FrameLayout.LayoutParams svl = new FrameLayout.LayoutParams(Math.round(W - 192 * s), H - Math.round(210 * s));
+        FrameLayout.LayoutParams svl = new FrameLayout.LayoutParams(Math.round(W - 192 * s), H - Math.round(188 * s));
         svl.leftMargin = Math.round(96 * s);
         svl.topMargin = Math.round(190 * s);
         root.addView(sv, svl);
         setContentView(root);
     }
 
+    private int tgt;        // положение прокрутки, к которому идёт список (всегда начало какой-нибудь строки)
+
+    private int margin() { return Math.round(8 * s); }
+
+    private List<View> rows() {
+        List<View> r = new java.util.ArrayList<>();
+        for (int k = 0; k < col.getChildCount(); k++) if (col.getChildAt(k).isFocusable()) r.add(col.getChildAt(k));
+        return r;
+    }
+
+    /** Прокрутка: выбранная строка видна целиком, список сдвигается ровно на строку и всегда начинается с начала строки. */
+    private void snapTo(View n) {
+        List<View> rows = rows();
+        int idx = rows.indexOf(n), m = margin(), hgt = sv.getHeight(), f = 0;
+        if (idx < 0) return;
+        for (int k = 0; k < rows.size(); k++) if (rows.get(k).getTop() - m <= tgt) f = k;
+        if (idx < f) f = idx;
+        else while (f < idx && n.getBottom() > rows.get(f).getTop() - m + hgt) f++;
+        tgt = Math.max(0, rows.get(f).getTop() - m);
+        sv.smoothScrollTo(0, tgt);
+        sv.invalidate();
+    }
+
+    /** Список без собственной «доводки» выбранной строки (её делает snapTo) и с обрезкой по нижней целой строке. */
+    private class Snap extends ScrollView {
+        Snap(android.content.Context c) { super(c); }
+
+        @Override public boolean requestChildRectangleOnScreen(View child, android.graphics.Rect r, boolean immediate) { return false; }
+
+        @Override protected void dispatchDraw(android.graphics.Canvas c) {
+            int lim = tgt + getHeight(), best = 0;
+            for (View v : rows()) if (v.getBottom() <= lim) best = Math.max(best, v.getBottom());
+            if (best == 0) { super.dispatchDraw(c); return; }
+            c.save();
+            c.clipRect(0, getScrollY(), getWidth(), Math.min(getScrollY() + getHeight(), best + Math.round(6 * s)));
+            super.dispatchDraw(c);
+            c.restore();
+        }
+    }
     private int langV = L.version;
 
     @Override protected void onResume() {
@@ -81,15 +133,22 @@ public class ManageActivity extends Activity {
         int hidden = 0;
         Set<String> hs = prefs.hidden();
         for (AppRepo.AppItem a : all) if (hs.contains(a.pkg)) hidden++;
-        sub.setText(L.t("Всего: ") + all.size() + L.t(" · скрыто: ") + hidden);
+        if (favMode) sub.setText(L.t("OK — добавить в избранное или убрать · удержание — меню"));
+        else sub.setText(L.t("Всего: ") + all.size() + L.t(" · скрыто: ") + hidden + L.t(" · избранных: ") + prefs.favs().size());
     }
 
-    private void populate() {
+    private void populate() { populate(null); }
+
+    /** focusPkg — приложение, на которое вернуть фокус после перестройки списка (иначе остаёмся на той же позиции). */
+    private void populate(String focusPkg) {
         int focusIdx = 0;
         View f = getCurrentFocus();
         if (f != null) focusIdx = Math.max(0, col.indexOfChild(f));
         col.removeAllViews();
-        for (final AppRepo.AppItem a : all) {
+        int want = -1, n = 0;
+        final List<AppRepo.AppItem> lst = AppRepo.favFirst(all, prefs);
+        final List<String> fav = prefs.favs();
+        for (final AppRepo.AppItem a : lst) {
             final GlassView r = new GlassView(this);
             r.left = true;
             r.label = a.label;
@@ -98,7 +157,7 @@ public class ManageActivity extends Activity {
             r.focusScale = 1.02f;
             style(r, a);
             r.setOnClickListener(v -> {
-                menu(r, a);     // OK: открыть, показать/скрыть, удалить, о приложении
+                if (favMode) toggleFav(a); else menu(r, a);     // OK: открыть, показать/скрыть, избранное, удалить, о приложении
             });
             r.setOnLongClickListener(v -> { menu(r, a); return true; });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, Math.round(88 * s));
@@ -106,14 +165,30 @@ public class ManageActivity extends Activity {
             lp.leftMargin = Math.round(12 * s);
             lp.rightMargin = Math.round(12 * s);
             col.addView(r, lp);
+            if (a.pkg.equals(focusPkg)) want = col.getChildCount() - 1;
+            // отсечка между избранными и остальными
+            if (fav.contains(a.pkg) && n + 1 < lst.size() && !fav.contains(lst.get(n + 1).pkg)) {
+                View sep = new View(this);
+                sep.setBackgroundColor(0x40FFFFFF);
+                LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(-1, Math.max(2, Math.round(3 * s)));
+                sl.topMargin = Math.round(8 * s);
+                sl.bottomMargin = Math.round(18 * s);
+                sl.leftMargin = Math.round(40 * s);
+                sl.rightMargin = Math.round(40 * s);
+                col.addView(sep, sl);
+            }
+            n++;
         }
+        if (want >= 0) focusIdx = want;
         updateSub();
-        if (col.getChildCount() > 0) col.getChildAt(Math.min(focusIdx, col.getChildCount() - 1)).requestFocus();
+        // разделитель не фокусируется — берём ближайший ряд вверх
+        for (int k = Math.min(focusIdx, col.getChildCount() - 1); k >= 0; k--) {
+            if (col.getChildAt(k).isFocusable()) { col.getChildAt(k).requestFocus(); break; }
+        }
     }
 
     private void style(GlassView r, AppRepo.AppItem a) {
         boolean hid = prefs.hidden().contains(a.pkg);
-        r.dim = hid;
         r.lock = prefs.isLocked(a.pkg);
         r.value = hid ? L.t("Скрыто") : L.t("Показано");
         r.invalidate();
@@ -127,12 +202,30 @@ public class ManageActivity extends Activity {
             // вернувшееся приложение ставим в конец списка
             java.util.List<String> o = prefs.order();
             o.remove(a.pkg);
-            o.add(a.pkg);
+            if (prefs.gridAlign() == 1) o.add(0, a.pkg); else o.add(a.pkg);      // по центру новые идут на верхнюю строку
             prefs.setOrder(o);
         }
         prefs.setHidden(hs);
         style(r, a);
         updateSub();
+    }
+
+    private void toggleFav(final AppRepo.AppItem a) {
+        List<String> f = prefs.favs();
+        if (!f.remove(a.pkg)) f.add(a.pkg);
+        prefs.setFavs(f);
+        populate(a.pkg);
+    }
+
+    /** Двигает избранное приложение выше или ниже среди избранных. */
+    private void moveFav(final AppRepo.AppItem a, int d) {
+        List<String> f = prefs.favs();
+        int i = f.indexOf(a.pkg), j = i + d;
+        if (i < 0 || j < 0 || j >= f.size()) return;
+        f.remove(i);
+        f.add(j, a.pkg);
+        prefs.setFavs(f);
+        populate(a.pkg);
     }
 
     private void launch(final AppRepo.AppItem a) {
@@ -168,15 +261,31 @@ public class ManageActivity extends Activity {
     private void menu(final GlassView r, final AppRepo.AppItem a) {
         boolean hid = prefs.hidden().contains(a.pkg);
         boolean lk = prefs.isLocked(a.pkg);
-        String[] items = {L.t("Открыть"), hid ? L.t("Показать на рабочем столе") : L.t("Скрыть с рабочего стола"),
+        final List<String> fl = prefs.favs();
+        final boolean fv = fl.contains(a.pkg);
+        List<String> its = new java.util.ArrayList<>();
+        final List<Integer> ids = new java.util.ArrayList<>();
+        String[] base = {L.t("Открыть"), hid ? L.t("Показать на рабочем столе") : L.t("Скрыть с рабочего стола"),
+                fv ? L.t("Убрать из избранного") : L.t("В избранное"),
                 lk ? L.t("Снять защиту PIN-кодом") : L.t("Защитить PIN-кодом"), L.t("Удалить"), L.t("О приложении")};
-        GlassDialog.menu(this, a.label, items, i -> {
-            switch (i) {
+        for (int k = 0; k < base.length; k++) {
+            its.add(base[k]); ids.add(k);
+            if (k == 2 && fv) {
+                int pos = fl.indexOf(a.pkg);
+                if (pos > 0) { its.add(L.t("Переместить выше")); ids.add(10); }
+                if (pos < fl.size() - 1) { its.add(L.t("Переместить ниже")); ids.add(11); }
+            }
+        }
+        GlassDialog.menu(this, a.label, its.toArray(new String[0]), i -> {
+            switch (ids.get(i)) {
                 case 0: launch(a); break;
                 case 1: toggle(r, a); break;
-                case 2: toggleLock(r, a); break;
-                case 3: UI.start(this, new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + a.pkg))); break;
-                case 4: UI.start(this, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + a.pkg))); break;
+                case 2: toggleFav(a); break;
+                case 3: toggleLock(r, a); break;
+                case 4: UI.start(this, new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + a.pkg))); break;
+                case 5: UI.start(this, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + a.pkg))); break;
+                case 10: moveFav(a, -1); break;
+                case 11: moveFav(a, 1); break;
             }
         }).show();
     }

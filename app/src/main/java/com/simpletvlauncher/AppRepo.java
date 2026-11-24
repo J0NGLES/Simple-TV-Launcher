@@ -64,6 +64,20 @@ public final class AppRepo {
         return res;
     }
 
+    /** Полный список: сначала избранные (в порядке пользователя), затем остальные по алфавиту. */
+    public static List<AppItem> favFirst(List<AppItem> all, Prefs prefs) {
+        Map<String, AppItem> by = new HashMap<>();
+        for (AppItem a : all) by.put(a.pkg, a);
+        List<AppItem> res = new ArrayList<>();
+        Set<String> used = new HashSet<>();
+        for (String p : prefs.favs()) {
+            AppItem a = by.get(p);
+            if (a != null && used.add(p)) res.add(a);
+        }
+        for (AppItem a : all) if (used.add(a.pkg)) res.add(a);
+        return res;
+    }
+
     /** Видимые приложения в пользовательском порядке (новые — в конце, по алфавиту). */
     public static List<AppItem> visible(List<AppItem> all, Prefs prefs) {
         Set<String> hidden = prefs.hidden();
@@ -75,7 +89,10 @@ public final class AppRepo {
             AppItem a = byPkg.get(p);
             if (a != null && used.add(p)) res.add(a);
         }
-        for (AppItem a : all) if (byPkg.containsKey(a.pkg) && used.add(a.pkg)) res.add(a);
+        // новые приложения: по центру — на верхнюю строку (в начало), иначе в конец
+        boolean top = prefs.gridAlign() == 1;
+        int ins = 0;
+        for (AppItem a : all) if (byPkg.containsKey(a.pkg) && used.add(a.pkg)) { if (top) res.add(ins++, a); else res.add(a); }
         return res;
     }
 

@@ -57,6 +57,7 @@ public class MainActivity extends Activity {
     private HighlightView[] hls() { return new HighlightView[]{hlTop, hlGrid, hlTopR, hlGridR}; }
     private GlassView weatherPill, capsule, btnVpn, btnNet, btnGear, btnSource, btnSearch, btnApps, btnLauncher;
     private int langV;                  // версия языка, с которой построен экран
+    private float fsBuilt;              // размер шрифта, с которым построен экран
     private long lastHome = -10000;
     private static final long UNLOCK_MS = 3 * 60 * 1000L;
     private static long unlockUntil;    // общее для всего приложения время, а не число входов: после жеста всё открыто ровно 3 минуты          // «режим для бабушек»: до этого момента меню временно разблокировано
@@ -215,6 +216,7 @@ public class MainActivity extends Activity {
         prefs = new Prefs(this);
         L.init(this);
         langV = L.version;
+        fsBuilt = UI.fs;
         Icons.init(this);
         android.util.DisplayMetrics m = getResources().getDisplayMetrics();
         W = m.widthPixels;
@@ -267,7 +269,7 @@ public class MainActivity extends Activity {
         // реальная высота окна может быть меньше экрана (системные панели): прокрутка должна доходить до конца
         root.addOnLayoutChangeListener((v, l, t, r, bt, ol, ot, or, ob) -> {
             if (!recreating && (r - l != or - ol || bt - t != ob - ot) && ol != or && screenChanged()) { recreating = true; recreate(); return; }
-            int want = Math.round((bt - t) - vy);
+            int want = Math.round((bt - t) - vy - pinOff);
             ViewGroup.LayoutParams lp = sv.getLayoutParams();
             if (want > 0 && lp.height != want) { lp.height = want; sv.setLayoutParams(lp); }
         });
@@ -302,21 +304,10 @@ public class MainActivity extends Activity {
         h.postDelayed(() -> Wake.openAuto(this, pkg), 800);
     }
 
-    // ---- выход из сна: по желанию открывается приложение автозапуска ----
+    // ---- выход из сна: возврат на главный экран, по желанию — приложение автозапуска ----
     private final BroadcastReceiver screenOnRx = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) {
-            Wake.wokeAt = android.os.SystemClock.elapsedRealtime();
-            if (resumed) wakeCheck();       // лаунчер уже на экране; иначе проверка пройдёт в onResume (если он случится сразу после пробуждения)
-        }
+        @Override public void onReceive(Context c, Intent i) { Wake.wake(c); }
     };
-
-    private void wakeCheck() {
-        long now = android.os.SystemClock.elapsedRealtime();
-        if (Wake.wokeAt == 0 || now - Wake.wokeAt > 4000 || Wake.afterBoot()) return;       // не пробуждение, а давний возврат на экран или загрузка
-        Wake.wokeAt = 0;
-        final String pkg = prefs.autoApp();
-        if (prefs.wakeApp() && !pkg.isEmpty()) h.postDelayed(() -> Wake.openAuto(this, pkg), 1500);
-    }
 
     @Override protected void onDestroy() {
         super.onDestroy();
@@ -342,9 +333,8 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         L.init(this);
-        if (L.version != langV || screenChanged()) { recreate(); return; }      // сменили язык или разрешение — экран строится заново
+        if (L.version != langV || screenChanged() || fsBuilt != UI.fs) { recreate(); return; }      // сменили язык, размер шрифта или разрешение — экран строится заново
         resumed = true;
-        wakeCheck();
         Frost.bg = bg;      // другие экраны подменяют его своим фоном
         if (!sigOf().equals(sig)) {
             applyPrefs();
@@ -421,6 +411,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     if (d != null || wd == null) wd = d;
                     weatherPill.invalidate();
+                    fitWeather();
                     maybeRefreshWeather();
                 });
             });
@@ -488,22 +479,39 @@ public class MainActivity extends Activity {
         }
     }
 
+    private float gridOff;      // сдвиг группы плиток от левого поля: ряд уже области, интервал ограничен, группа стоит по центру
+
     private void computeGrid() {
-        cols = prefs.cols();
-        gap = (cols >= 10 ? 12 : cols == 9 ? 15 : cols == 8 ? 19 : 24) * s;     // на плотной сетке интервал меньше
-        // плитки прижаты к левому краю; при 100 % ряд занимает ширину до правой линии часов
+        int ts = prefs.tileSize();
+        gridOff = 0;
         float availW = W - 2 * mx;
-        tw = (availW - (cols - 1) * gap) / cols;
-        th = tw * 9f / 16f;      // баннеры Android TV — 16:9
-        // два ряда вместе с нижней частью обязаны помещаться без прокрутки на любом экране: при нехватке высоты плитки уменьшаются,
-        // а свободная ширина уходит в интервал между ними
         float below = prefs.panelTop() ? 34 * s + END_PAD * s : 34 * s + botGap + 104 * s + BOTTOM_PAD * s;
-        // при самой крупной сетке (4 плитки в ряду) с нижней панелью «Настройки» без прокрутки помещается один ряд, с панелью наверху — два
-        int fit = cols == 4 && !prefs.panelTop() ? 1 : 2;
-        float maxTh = (H - vy - gridTop() - below - (fit - 1) * gap) / fit;
-        if (maxTh > 0 && th > maxTh) { th = maxTh; tw = th * 16f / 9f; }
+        if (ts == 0) {
+            cols = prefs.cols();
+            gap = (cols >= 10 ? 12 : cols == 9 ? 15 : cols == 8 ? 19 : 24) * s;     // на плотной сетке интервал меньше
+            // плитки прижаты к левому краю; при 100 % ряд занимает ширину до правой линии часов
+            tw = (availW - (cols - 1) * gap) / cols;
+            th = tw * 9f / 16f;      // баннеры Android TV — 16:9
+            // два ряда вместе с нижней частью обязаны помещаться без прокрутки на любом экране: при нехватке высоты плитки уменьшаются,
+            // а свободная ширина уходит в интервал между ними
+            // при самой крупной сетке (4 плитки в ряду) с нижней панелью «Настройки» без прокрутки помещается один ряд, с панелью наверху — два
+            int fit = cols == 4 && !prefs.panelTop() ? 1 : 2;
+            float maxTh = (H - vy - gridTop() - below - (fit - 1) * gap) / fit;
+            if (maxTh > 0 && th > maxTh) { th = maxTh; tw = th * 16f / 9f; }
+            pitch = cols > 1 ? (availW - tw) / (cols - 1) : tw + gap;
+        } else {
+            // заданный размер: плитка фиксирована, в ряд помещается столько, сколько влезет; остаток ширины распределяет выравнивание
+            gap = 20 * s;
+            tw = Prefs.TILE_W[ts] * s;
+            cols = Math.min(Math.max(1, (int) ((availW + gap) / (tw + gap))), prefs.cols());      // число плиток в ряду можно ограничить и при заданном размере
+            th = tw * 9f / 16f;
+            float maxTh = H - vy - gridTop() - below;       // хотя бы один ряд должен помещаться без прокрутки
+            if (maxTh > 0 && th > maxTh) { th = maxTh; tw = th * 16f / 9f; }
+            // по левому краю плитки растягиваются на всю ширину (отступы слева и справа равны), по центру — стоят группой с обычным интервалом
+            pitch = prefs.gridAlign() == 1 || cols < 2 ? tw + gap : Math.min((availW - tw) / (cols - 1), tw * 1.6f);      // интервал не больше 0,6 ширины плитки
+            if (prefs.gridAlign() == 0 && cols > 1) gridOff = Math.max(0, (availW - ((cols - 1) * pitch + tw)) / 2f);
+        }
         slotW = tw;
-        pitch = cols > 1 ? (availW - tw) / (cols - 1) : tw + gap;
         rowPitch = th + gap;
     }
 
@@ -511,7 +519,12 @@ public class MainActivity extends Activity {
     private static final float END_PAD = 40f;        // отступ под матовой панелью, когда нижней панели «Настройки» нет
 
     private float gridTop() { return 100 * s; }
-    private float slotX(int i) { return mx + (i % cols) * pitch; }
+    /** Положение плитки в ряду: неполный (и при заданном размере любой) ряд сдвигается по выравниванию — влево, по центру или вправо. */
+    private float slotX(int i) {
+        int rs = i / cols * cols, n = Math.min(cols, Math.max(1, visible.size() - rs));
+        float free = Math.max(0, (W - 2 * mx) - ((n - 1) * pitch + tw)), al = prefs.gridAlign();
+        return mx + gridOff + (i - rs) * pitch + free * al / 2f;
+    }
     private float slotY(int i) { return gridTop() + (i / cols) * rowPitch; }
 
     // ------------------------------------------------------------ построение интерфейса
@@ -562,7 +575,7 @@ public class MainActivity extends Activity {
         float topY = 46 * s, ph = 84 * s;
 
         // часы справа (24-часовой формат)
-        clock = UI.text(this, "00:00", 96 * s, 0xFFFFFFFF, GlassView.LIGHT);
+        clock = UI.text(this, "00:00", 96 * s, 0xFFFFFFFF, GlassView.LIGHT, false);
         clock.setLetterSpacing(-0.02f);
         clock.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         float cw = clock.getPaint().measureText("88:88") * 1.04f + 8 * s;
@@ -624,12 +637,13 @@ public class MainActivity extends Activity {
             else startActivity(new Intent(this, WeatherActivity.class));
         });
         weatherPill.setOnLongClickListener(v -> { refreshWeather(true); return true; });
+        fitWeather();
 
         // ненавязчивое напоминание под датой (только в версии с фиксом «Домой»): служба спецвозможностей не включена или слетела
         final String msg = L.t("Дайте доступ к спецвозможностям для корректной работы приложения");
         float nh = 44 * s;
         android.graphics.Paint mp = new android.graphics.Paint();
-        mp.setTextSize(nh * 0.46f);
+        mp.setTextSize(nh * 0.46f * UI.fs);
         mp.setTypeface(GlassView.REG);      // тем же шрифтом, каким текст рисуется в рамке
         float nw = Math.min(W - 2 * mx, mp.measureText(msg) + nh * 0.9f);
         notice = glass(nh / 2, 0, null);
@@ -645,7 +659,7 @@ public class MainActivity extends Activity {
         updateNotice();
     }
 
-    private GlassView notice;
+    private GlassView notice, topLast;       // topLast — крайняя правая кнопка капсулы
     private float noticeW, frostTop;
 
     /**
@@ -654,8 +668,9 @@ public class MainActivity extends Activity {
      */
     private void placeNotice() {
         if (notice == null) return;
-        boolean roomy = frostTop >= (182 + 44 + 10) * s;
-        moveTo(notice, roomy ? W - mx - noticeW : mx, roomy ? 182 * s : frostTop - 54 * s);
+        float ft = frostTop + pinOff;
+        boolean roomy = ft >= (182 + 44 + 10) * s;
+        moveTo(notice, roomy ? W - mx - noticeW : mx, roomy ? (182 - 16 * (UI.fs - 1f)) * s : ft - 54 * s);
     }
 
     /** Показывает напоминание, если служба спецвозможностей (фикс «Домой», автозапуск) не включена. */
@@ -705,14 +720,14 @@ public class MainActivity extends Activity {
         btnSource.setVisibility(src ? View.VISIBLE : View.GONE);
         btnSource.setFocusable(src);
         if (src) bs.add(btnSource);
-        // с кнопками настроек наверху (нижней панели нет) шестерня остаётся всегда: иначе до системных настроек не добраться
         boolean pt = prefs.panelTop();
-        boolean sv2 = prefs.showVpnBtn(), sn = prefs.showNetBtn(), sg = prefs.showGearBtn() || pt;
+        boolean sv2 = prefs.showVpnBtn(), sn = prefs.showNetBtn(), sg = prefs.showGearBtn();
         show(btnVpn, sv2); show(btnNet, sn); show(btnGear, sg);
         show(btnApps, pt); show(btnLauncher, pt);
         if (sv2) bs.add(btnVpn);
         if (sn) bs.add(btnNet);        if (pt) { bs.add(btnApps); bs.add(btnLauncher); }
         if (sg) bs.add(btnGear);
+        topLast = bs.isEmpty() ? null : bs.get(bs.size() - 1);
         capsule.setVisibility(bs.isEmpty() ? View.GONE : View.VISIBLE);
         float pad = 0;      // края капсулы совпадают с краями белого кружка
         float cw = bs.size() * ph + 2 * pad;
@@ -733,10 +748,10 @@ public class MainActivity extends Activity {
 
         appsHdr = UI.text(this, L.t("ПРИЛОЖЕНИЯ"), 21 * s, 0x99FFFFFF, GlassView.MED);
         appsHdr.setLetterSpacing(0.2f);
-        placeC(appsHdr, mx, 14 * s, 600 * s, 36 * s);
+        placeC(appsHdr, mx, 14 * s, W - 2 * mx, 36 * s);
         setHdr = UI.text(this, L.t("НАСТРОЙКИ"), 21 * s, 0x99FFFFFF, GlassView.MED);
         setHdr.setLetterSpacing(0.2f);
-        placeC(setHdr, mx, 500 * s, 600 * s, 36 * s);
+        placeC(setHdr, mx, 500 * s, W - 2 * mx, 36 * s);
     }
 
     private void buildPanel() {
@@ -804,6 +819,12 @@ public class MainActivity extends Activity {
         float gridEnd = gridTop() + rows * rowPitch - gap;
         // матовая панель за сеткой
         float px = mx - 30 * s, py = 62 * s, pw = W - 2 * mx + 60 * s, ph = gridEnd + 34 * s - py;
+        final boolean ctr = prefs.gridAlign() == 1;
+        if ((ctr || gridOff > 0.5f) && n > 0) {         // панель не шире самого длинного ряда: пустого стекла по бокам нет
+            pw = (Math.min(cols, n) - 1) * pitch + tw + 60 * s;
+            px = ctr ? (W - pw) / 2f : mx + gridOff - 30 * s;
+        }
+        moveTo(appsHdr, mx + gridOff, 14 * s);
         FrameLayout.LayoutParams fl = (FrameLayout.LayoutParams) frost.getLayoutParams();
         fl.leftMargin = Math.round(px);
         fl.topMargin = Math.round(py);
@@ -814,20 +835,33 @@ public class MainActivity extends Activity {
         frost.setVisibility(View.VISIBLE);
         float panelY = gridEnd + 34 * s + botGap, hdrY = panelY - 46 * s, panelH = 104 * s;
         boolean pt = prefs.panelTop();
+        autoTop = 0;
+        if (!pt) {
+            // свободное место внизу делится: часть — между верхними кнопками и сеткой, часть — между сеткой и нижними кнопками
+            float slack = H - vy - (panelY + panelH + BOTTOM_PAD * s);
+            if (prefs.gridPin() == 0 && slack > 0) {
+                float mid = Math.min(slack * 0.2f, 36 * s);
+                autoTop = Math.min(slack * 0.3f, 80 * s);
+                panelY += mid;
+                hdrY += mid;
+            }
+        }
         setHdr.setVisibility(pt || !prefs.showHdrs() ? View.GONE : View.VISIBLE);
         for (GlassView g : setTiles) show(g, !pt);
         if (pt) {
             // нижней панели нет: ни заголовка, ни кнопок, ни отступа под ними — ниже матовой панели остаётся лишь небольшой край
             contentH = Math.round(gridEnd + 34 * s + END_PAD * s);
         } else {
-            moveTo(setHdr, mx, hdrY);
-            for (int i = 0; i < SET_COUNT; i++) moveTo(setTiles[i], mx + i * (324 * s), panelY);
+            moveTo(setHdr, mx + gridOff, hdrY);
+            float tx = ctr ? (W - (2 * 324 + 300) * s) / 2f : mx + gridOff;
+            for (int i = 0; i < SET_COUNT; i++) moveTo(setTiles[i], tx + i * (324 * s), panelY);
             contentH = Math.round(panelY + panelH + BOTTOM_PAD * s);     // фиксированный отступ снизу после «Настроек»
         }
         // ScrollView меряет содержимое без учёта заданной высоты (по самому нижнему элементу), поэтому нижний отступ задаём минимальной высотой
+        applyPin();
         content.setMinimumHeight(contentH);
         ViewGroup.LayoutParams lp = content.getLayoutParams();
-        lp.height = Math.max(contentH, Math.round(H - vy));
+        lp.height = Math.max(contentH, Math.round(H - vy - pinOff));
         content.setLayoutParams(lp);
         content.requestLayout();
     }
@@ -841,7 +875,7 @@ public class MainActivity extends Activity {
     private String sigOf() {
         return prefs.hidden().toString() + prefs.order() + prefs.theme() + prefs.showDate()
                 + prefs.cols() + prefs.bgMode() + prefs.showSourceBtn() + prefs.showSearchBtn() + prefs.showVpnBtn() + prefs.showNetBtn() + prefs.showGearBtn() + prefs.showWeather() + prefs.panelTop()
-                + prefs.showTitle() + prefs.showHdrs() + prefs.clock12();
+                + prefs.showTitle() + prefs.showHdrs() + prefs.clock12() + prefs.tileSize() + prefs.gridPin() + prefs.gridAlign() + prefs.glow();
     }
 
     /**
@@ -850,34 +884,56 @@ public class MainActivity extends Activity {
      */
     private void geom() {
         boolean ti = prefs.showTitle(), hd = prefs.showHdrs();
-        float top = ti ? (hd ? 335 : 325) : (194 + (hd ? 48 : 0));       // верх матовой панели от верха экрана, в условных пикселях
+        float top = ti ? (hd ? 335 : 325) + 80 * (UI.fs - 1f) : (194 + (hd ? 48 : 0));      // при крупном шрифте под названием больше места до подписи категории       // верх матовой панели от верха экрана, в условных пикселях
         vy = (top - 62) * s;
         frostTop = top * s;
         placeNotice();
         botGap = (hd ? 131 : 64) * s;                                    // от низа панели до нижних кнопок
+        applyPin();
+    }
+
+    private float autoTop;     // при малом числе рядов свободное место делится между верхним и нижним промежутками (положение сетки «сверху»)
+    private float pinOff;       // на сколько сетка опущена вниз (положение «по центру» и «снизу»)
+
+    /**
+     * Сетку можно прижать к центру или низу экрана: весь блок (название, матовая панель, нижние кнопки) опускается на свободное место.
+     * Если блок не помещается (много рядов), он стоит на своём обычном месте и прокручивается.
+     */
+    private void applyPin() {
+        int mode = prefs.gridPin();
+        float slack = H - vy - contentH;
+        pinOff = contentH <= 0 ? 0 : mode == 0 ? autoTop : Math.max(0, mode == 1 ? slack / 2f : slack);
         if (sv != null) {
             ViewGroup.LayoutParams lp = sv.getLayoutParams();
-            lp.height = Math.round((root.getHeight() > 0 ? root.getHeight() : H) - vy);
-            moveTo(sv, 0, vy);
+            lp.height = Math.round((root.getHeight() > 0 ? root.getHeight() : H) - vy - pinOff);
+            moveTo(sv, 0, vy + pinOff);
         }
+        if (shelfTitle != null) moveTo(shelfTitle, mx + gridOff, 197 * s + 56 * (UI.fs - 1f) * s + pinOff);      // при крупном шрифте название чуть ниже, подальше от плашки
+        placeNotice();
     }
 
     /** Название выбранного приложения и подписи категорий — по настройкам. */
     private void applyLabels() {
         shelfTitle.setVisibility(prefs.showTitle() ? View.VISIBLE : View.INVISIBLE);
         boolean hd = prefs.showHdrs();
+        int gr = prefs.gridAlign() == 1 ? Gravity.CENTER : Gravity.LEFT | Gravity.CENTER_VERTICAL;      // при центрировании сетки подписи тоже по центру
+        shelfTitle.setGravity(gr);
+        appsHdr.setGravity(gr);
+        setHdr.setGravity(gr);
         appsHdr.setVisibility(hd ? View.VISIBLE : View.INVISIBLE);
         setHdr.setVisibility(hd && !prefs.panelTop() ? View.VISIBLE : View.GONE);
     }
 
     private void applyPrefs() {
         sig = sigOf();
+        hlGridR.glow = prefs.glow();
         geom();
         computeGrid();
         dateTv.setVisibility(prefs.showDate() ? View.VISIBLE : View.GONE);
         show(weatherPill, prefs.showWeather());
         updateClock();
         layoutTop();
+        fitWeather();
         applyLabels();
     }
 
@@ -1035,7 +1091,18 @@ public class MainActivity extends Activity {
         View fv = getCurrentFocus();
         int kc = e.getKeyCode();
         // из верхнего ряда в сторону «в никуда» выбор не уходит: на список приложений — только кнопкой «Вниз»
-        if (!moving && ((fv == btnGear && kc == KeyEvent.KEYCODE_DPAD_RIGHT) || (fv == weatherPill && kc == KeyEvent.KEYCODE_DPAD_LEFT))) return true;
+        if (!moving && ((fv == topLast && kc == KeyEvent.KEYCODE_DPAD_RIGHT) || (fv == weatherPill && kc == KeyEvent.KEYCODE_DPAD_LEFT))) return true;
+        // переход через край ряда (по вертикали выбор ходит как обычно): включено «Циклический переход» — по кругу внутри ряда,
+        // выключено — на соседний ряд (вправо с последней плитки на первую плитку следующего ряда, влево — на последнюю предыдущего)
+        if (!moving && fv instanceof AppTile && e.getAction() == KeyEvent.ACTION_DOWN
+                && (kc == KeyEvent.KEYCODE_DPAD_LEFT || kc == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            int i = tiles.indexOf(fv), rs = i / cols * cols, re = Math.min(rs + cols, tiles.size()) - 1, to = -1;
+            boolean cyc = prefs.cycle();
+            if (kc == KeyEvent.KEYCODE_DPAD_RIGHT && i == re) { if (cyc) to = rs; else if (re + 1 < tiles.size()) to = re + 1; else return true; }       // без цикла — на первую плитку следующего ряда, с самой последней остаёмся
+            else if (kc == KeyEvent.KEYCODE_DPAD_LEFT && i == rs) to = cyc ? re : (rs > 0 ? rs - 1 : -1);
+            if (to >= 0 && to != i) { tiles.get(to).requestFocus(); return true; }
+            if (to < 0 && !cyc && (kc == KeyEvent.KEYCODE_DPAD_LEFT && i == 0)) return true;      // с первой плитки влево — остаёмся на ней
+        }
         if (!moving && fv instanceof AppTile) {
             final AppTile ft = (AppTile) fv;
             if (kc == KeyEvent.KEYCODE_MENU) {
@@ -1125,8 +1192,8 @@ public class MainActivity extends Activity {
         RectF r = slots.get(v);
         if (r == null || v.getParent() != content) return;
         float pad = BOTTOM_PAD * s;
-        int vh = Math.round(H - vy), top = sv.getScrollY();
-        if (root.getHeight() > 0) vh = Math.min(vh, Math.round(root.getHeight() - vy));   // реально видимая область
+        int vh = Math.round(H - vy - pinOff), top = sv.getScrollY();
+        if (root.getHeight() > 0) vh = Math.min(vh, Math.round(root.getHeight() - vy - pinOff));   // реально видимая область
         if (sv.getHeight() > 0) vh = Math.min(vh, sv.getHeight());
         int ch = Math.max(contentH, vh);
         int target = top;
@@ -1515,6 +1582,7 @@ public class MainActivity extends Activity {
             @Override public void ok(Weather.Data d) {
                 wd = d;
                 weatherPill.invalidate();
+                fitWeather();
                 if (toast) android.widget.Toast.makeText(MainActivity.this, L.t("Погода обновлена"), android.widget.Toast.LENGTH_SHORT).show();
             }
             @Override public void fail(String m) {
@@ -1523,58 +1591,68 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void paintWeatherPillDark(Canvas c, GlassView v, float hh, float w) {
-        final int main = 0xFF1B1B22, sub = 0xFF55555F;
-        if (!prefs.hasLocation()) {
-            Icons.weather(c, "d_c1", hh * 0.58f, hh / 2f, hh * 0.3f, v.tp);
-            v.text(c, L.t("Погода"), hh * 1.1f, hh * 0.46f, hh * 0.37f, main, 2, Paint.Align.LEFT, w - hh * 1.3f);
-            v.text(c, L.t("Выберите город в настройках"),
-                    hh * 1.1f, hh * 0.77f, hh * 0.26f, sub, 1, Paint.Align.LEFT, w - hh * 1.3f);
-            return;
-        }
-        if (wd == null || wd.cur == null) {
-            v.text(c, L.t("Погода…"), hh * 0.5f, hh * 0.64f, hh * 0.34f, main, 1, Paint.Align.LEFT, w);
-            return;
-        }
-        Weather.Pt p = wd.cur;
-        Icons.weather(c, p.icon, hh * 0.58f, hh / 2f, hh * 0.3f, v.tp);
-        String t = Weather.temp(p.t);
-        float x = hh * 1.1f;
-        v.text(c, t, x, hh * 0.66f, hh * 0.53f, main, 2, Paint.Align.LEFT, 0);
-        float x2 = x + v.tp.measureText(t) + hh * 0.25f, mw = w - x2 - hh * 0.35f;
-        v.text(c, p.desc == null ? "" : p.desc, x2, hh * 0.45f, hh * 0.295f, main, 1, Paint.Align.LEFT, mw);
+    private String weatherSub(Weather.Pt p) {
         String sb = wd.city == null ? "" : wd.city;
         if (p.feel != null) sb += (sb.isEmpty() ? "" : " · ") + L.t("ощущается как ") + Weather.temp(p.feel);
-        v.text(c, sb, x2, hh * 0.77f, hh * 0.25f, sub, 1, Paint.Align.LEFT, mw);
+        return sb;
+    }
+
+    /** При крупном шрифте виджет погоды растёт вправо (до капсулы с кнопками), чтобы текст помещался целиком. */
+    private void fitWeather() {
+        if (weatherPill == null || capsule == null) return;
+        float ph = 84 * s, topY = 46 * s, w = 660 * s;
+        if (UI.fs > 1f && prefs.hasLocation() && wd != null && wd.cur != null) {
+            Paint pp = new Paint();
+            Weather.Pt p = wd.cur;
+            pp.setTypeface(GlassView.MED);
+            pp.setTextSize(ph * 0.53f * UI.fs);
+            float need = ph * 1.1f + pp.measureText(Weather.temp(p.t)) + ph * 0.25f + ph * 0.35f;
+            pp.setTypeface(GlassView.REG);
+            pp.setTextSize(ph * 0.295f * UI.fs);
+            float a = pp.measureText(p.desc == null ? "" : p.desc);
+            pp.setTextSize(ph * 0.25f * UI.fs);
+            need += Math.max(a, pp.measureText(weatherSub(p)));
+            float right = (capsule.getVisibility() == View.VISIBLE ? slots.get(capsule).left : slots.get(clock).left) - 24 * s;
+            w = Math.min(Math.max(w, need), Math.max(w, right - mx));
+        }
+        RectF r = slots.get(weatherPill);
+        if (r != null && Math.abs(r.width() - w) < 1f) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) weatherPill.getLayoutParams();
+        lp.width = Math.round(w);
+        weatherPill.setLayoutParams(lp);
+        slots.put(weatherPill, new RectF(mx, topY, mx + w, topY + ph));
+        weatherPill.invalidate();
+        if (weatherPill.isFocused()) moveHighlight(weatherPill);
+    }
+
+    /** Две строки текста одним блоком по центру высоты виджета: при любом размере шрифта блок не смещается вверх или вниз. */
+    private void twoLines(Canvas c, GlassView v, float x, String a, float sa, int ca, String b, float sb, int cb, float mw) {
+        float hh = v.getHeight(), f = UI.fs;
+        float ha = 0.72f * sa * hh * f, gap = 0.58f * (sa + sb) * hh * f;
+        float y1 = hh / 2f - (ha + gap) / 2f + ha;
+        v.text(c, a, x, y1, hh * sa, ca, 1, Paint.Align.LEFT, mw);
+        v.text(c, b, x, y1 + gap, hh * sb, cb, 1, Paint.Align.LEFT, mw);
     }
 
     private void paintWeatherPill(Canvas c, GlassView v) {
         float hh = v.getHeight(), w = v.getWidth();
-        if (v.isFocused() && v.solidFocus) {            // белая таблетка в фокусе — тёмный текст
-            paintWeatherPillDark(c, v, hh, w);
-            return;
-        }
+        boolean dark = v.isFocused() && v.solidFocus;            // белая таблетка в фокусе — тёмный текст
+        int main = dark ? 0xFF1B1B22 : 0xFFFFFFFF, sub = dark ? 0xFF55555F : 0xA6FFFFFF;
         if (!prefs.hasLocation()) {
             Icons.weather(c, "d_c1", hh * 0.58f, hh / 2f, hh * 0.3f, v.tp);
-            v.text(c, L.t("Погода"), hh * 1.1f, hh * 0.46f, hh * 0.37f, 0xFFFFFFFF, 2, Paint.Align.LEFT, w - hh * 1.3f);
-            v.text(c, L.t("Выберите город в настройках"),
-                    hh * 1.1f, hh * 0.77f, hh * 0.26f, 0xAAFFFFFF, 1, Paint.Align.LEFT, w - hh * 1.3f);
+            twoLines(c, v, hh * 1.1f, L.t("Погода"), 0.37f, main, L.t("Выберите город в настройках"), 0.26f, sub, w - hh * 1.3f);
             return;
         }
         if (wd == null || wd.cur == null) {
-            v.text(c, L.t("Погода…"), hh * 0.5f, hh * 0.64f, hh * 0.34f, 0xCCFFFFFF, 1, Paint.Align.LEFT, w);
+            v.text(c, L.t("Погода…"), hh * 0.5f, hh * 0.64f, hh * 0.34f, dark ? main : 0xCCFFFFFF, 1, Paint.Align.LEFT, w);
             return;
         }
         Weather.Pt p = wd.cur;
         Icons.weather(c, p.icon, hh * 0.58f, hh / 2f, hh * 0.3f, v.tp);
         String t = Weather.temp(p.t);
         float x = hh * 1.1f;
-        v.text(c, t, x, hh * 0.66f, hh * 0.53f, 0xFFFFFFFF, 2, Paint.Align.LEFT, 0);
-        float tw2 = v.tp.measureText(t);
-        float x2 = x + tw2 + hh * 0.25f, mw = w - x2 - hh * 0.35f;
-        v.text(c, p.desc == null ? "" : p.desc, x2, hh * 0.45f, hh * 0.295f, 0xF2FFFFFF, 1, Paint.Align.LEFT, mw);
-        String sub = wd.city == null ? "" : wd.city;
-        if (p.feel != null) sub += (sub.isEmpty() ? "" : " · ") + L.t("ощущается как ") + Weather.temp(p.feel);
-        v.text(c, sub, x2, hh * 0.77f, hh * 0.25f, 0xA6FFFFFF, 1, Paint.Align.LEFT, mw);
+        v.text(c, t, x, hh / 2f + 0.33f * hh * 0.53f * UI.fs, hh * 0.53f, main, 2, Paint.Align.LEFT, 0);
+        float x2 = x + v.tp.measureText(t) + hh * 0.25f, mw = w - x2 - hh * 0.35f;
+        twoLines(c, v, x2, p.desc == null ? "" : p.desc, 0.295f, dark ? main : 0xF2FFFFFF, weatherSub(p), 0.25f, sub, mw);
     }
 }

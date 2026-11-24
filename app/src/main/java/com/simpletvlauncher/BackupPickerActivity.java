@@ -114,7 +114,7 @@ public class BackupPickerActivity extends Activity {
         }
         float gap = 24 * s, tw = (1760 * s - 40 * s - (COLS - 1) * gap) / COLS, th = 230 * s;
         LinearLayout rowL = null;
-        SimpleDateFormat df = new SimpleDateFormat("d MMMM yyyy", new Locale("ru"));
+        SimpleDateFormat df = new SimpleDateFormat("d MMMM yyyy", L.locale());
         SimpleDateFormat tf = new SimpleDateFormat("HH:mm", Locale.US);
         for (int k = 0; k < items.size(); k++) {
             if (k % COLS == 0) {
@@ -175,7 +175,7 @@ public class BackupPickerActivity extends Activity {
             final Backup.Item it = Backup.inspect(this, u);
             runOnUiThread(() -> {
                 if (!it.ok) { Toast.makeText(this, L.t("Восстановить нельзя: ") + it.problem, Toast.LENGTH_LONG).show(); return; }
-                confirm(it, new SimpleDateFormat("d MMMM yyyy, HH:mm", new Locale("ru")).format(new Date(it.time)));
+                confirm(it, new SimpleDateFormat("d MMMM yyyy, HH:mm", L.locale()).format(new Date(it.time)));
             });
         });
     }

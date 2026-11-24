@@ -132,7 +132,7 @@ public class WeatherActivity extends Activity {
     }
 
     private void drawWrapped(Canvas c, GlassView v, String text, float x, float y, float maxW, float size) {
-        v.tp.setTextSize(size);
+        v.tp.setTextSize(size * UI.fs);
         v.tp.setTypeface(GlassView.REG);
         String[] words = text.split(" ");
         StringBuilder line = new StringBuilder();
@@ -178,7 +178,7 @@ public class WeatherActivity extends Activity {
 
         // --- ближайшие часы
         TextView hl = UI.text(this, L.t("Ближайшие часы"), 30 * s, 0xCCFFFFFF, GlassView.MED);
-        put(content, hl, 96, 506, 800, 40);
+        put(content, hl, 96, 506, 800, 40 + 40 * (UI.fs - 1f));
         List<Weather.Pt> hours = new ArrayList<>();
         long now = System.currentTimeMillis() / 1000;
         for (Weather.Pt p : d.h3) if (p.unix >= now - 5400 && hours.size() < 8) hours.add(p);
@@ -198,7 +198,7 @@ public class WeatherActivity extends Activity {
 
         // --- по дням
         TextView dl = UI.text(this, L.t("Прогноз по дням"), 30 * s, 0xCCFFFFFF, GlassView.MED);
-        put(content, dl, 96, 748, 800, 40);
+        put(content, dl, 96, 748, 800, 40 + 40 * (UI.fs - 1f));
         List<Weather.Pt> days = new ArrayList<>();
         for (Weather.Pt p : d.h24) if (p.unix >= now - 86400 && days.size() < 10) days.add(p);
         View firstDay = null;
@@ -228,7 +228,7 @@ public class WeatherActivity extends Activity {
             g.setOnFocusChangeListener((v, has) -> {
                 if (has) { selected = p; detail.invalidate(); }
             });
-            put(content, g, 96 + i * (dw + 16), 792, dw, 232);
+            put(content, g, 96 + i * (dw + 16), 792 + 80 * (UI.fs - 1f), dw, 232);
             if (firstDay == null) firstDay = g;
         }
         if (firstDay != null) firstDay.requestFocus(); else btnRefresh.requestFocus();
@@ -246,7 +246,7 @@ public class WeatherActivity extends Activity {
         String[][] items = {
                 {L.t("Ощущается как"), Weather.temp(p.feel)},
                 {L.t("Скорость ветра"), Weather.windSpeedText(p)},
-                {L.t("Направление ветра"), Weather.windDirText(p)},
+                {L.t(new Prefs(this).fontSize() >= 2 ? "Направление" : "Направление ветра"), Weather.windDirText(p)},
                 {L.t("Влажность"), p.hum == null ? "–" : Math.round(p.hum) + " %"},
                 {L.t("Давление"), Weather.pressText(p.press)},
                 {L.t("Осадки"), p.prec == null || p.prec < 0.05 ? L.t("нет") : Weather.precText(p.prec)},

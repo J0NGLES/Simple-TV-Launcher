@@ -222,7 +222,7 @@ public final class Weather {
     }
 
     private static List<Place> nominatim(String q) throws Exception {
-        String url = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=10&accept-language=" + (L.en() ? "en" : "ru") + "&featuretype=settlement&q="
+        String url = "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=10&accept-language=" + L.code + "&featuretype=settlement&q="
                 + URLEncoder.encode(q, "UTF-8");
         JSONArray a = new JSONArray(WeatherProviders.http(url, null));
         List<Place> res = new ArrayList<>();

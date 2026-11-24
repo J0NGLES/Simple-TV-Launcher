@@ -30,7 +30,6 @@ public class GlassView extends View {
     public Drawable appIcon;         // для строк списка
     public boolean left;             // строка списка: текст слева, значение справа
     public boolean floating;         // фокус рисует плавающая подсветка, не сама плитка
-    public boolean dim;              // приглушённое состояние (скрытое приложение)
     public boolean frosted;          // frosted glass with backdrop blur (home screen)
     public boolean blurBack;          // dialog row: blurred backdrop snapshot
     public int tint;                 // строка настроек: заливка другим цветом (0 — нет)
@@ -186,9 +185,7 @@ public class GlassView extends View {
             rf.set(0, 0, getWidth(), getHeight());
             c.drawRoundRect(rf, radius, radius, p);
         }
-        if (dim) c.saveLayerAlpha(0, 0, getWidth(), getHeight(), 110);
         drawContent(c);
-        if (dim) c.restore();
         if (!plain) drawChrome(c);
     }
 
@@ -217,7 +214,7 @@ public class GlassView extends View {
             float vw = 0;
             if (value != null) {
                 tp.setTypeface(REG);
-                tp.setTextSize(h * 0.30f);
+                tp.setTextSize(h * 0.30f * UI.fs);
                 vw = tp.measureText(value) + pad;
                 text(c, value, w - pad, h * 0.64f, h * 0.30f, dk ? 0xFF55555F : 0xA0FFFFFF, 1, Paint.Align.RIGHT, 0);
             }
@@ -255,7 +252,7 @@ public class GlassView extends View {
         if (s == null) return;
         tp.setStyle(Paint.Style.FILL);
         tp.setShader(null);
-        tp.setTextSize(size);
+        tp.setTextSize(size * UI.fs);
         tp.setColor(color);
         tp.setTypeface(style == 0 ? LIGHT : style == 1 ? REG : MED);
         tp.setTextAlign(al);

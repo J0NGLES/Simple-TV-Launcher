@@ -31,6 +31,7 @@ public class Prefs {
         }
         if (sp.contains("ambBlur")) sp.edit().remove("ambPat").remove("ambPat2").remove("ambPat3").remove("ambSpeed").remove("ambBlur").apply();    // настройки удалённого режима «Эмбиент»
         syncUnits();
+        UI.fs = FONT_K[fontSize()];
     }
 
     public SharedPreferences raw() { return sp; }
@@ -73,6 +74,9 @@ public class Prefs {
     public void setShowTitle(boolean v) { sp.edit().putBoolean("showTitle", v).apply(); }
     public boolean showHdrs() { return sp.getBoolean("showHdrs", true); }
     public void setShowHdrs(boolean v) { sp.edit().putBoolean("showHdrs", v).apply(); }
+    /** Возврат на главный экран лаунчера при выходе из сна (по умолчанию включён, если не выбран запуск приложения). */
+    public boolean wakeHome() { return sp.getBoolean("wakeHome", false); }
+    public void setWakeHome(boolean v) { sp.edit().putBoolean("wakeHome", v).apply(); }
     public boolean wakeApp() { return sp.getBoolean("wakeApp", false); }
     public void setWakeApp(boolean v) { sp.edit().putBoolean("wakeApp", v).apply(); }
     /** 12-часовой формат времени. Пока пользователь не выбрал сам — включён с английским языком приложения и выключен с русским. */
@@ -83,6 +87,37 @@ public class Prefs {
     public void setAutoBootDone(String v) { sp.edit().putString("autoBootDone", v).apply(); }
     public int cols() { return Math.max(4, Math.min(10, sp.getInt("cols", 7))); }
     public void setCols(int v) { sp.edit().putInt("cols", v).apply(); }
+
+    // ---- сетка приложений ----
+    /** Размер плиток: 0 авто (по числу в ряду), 1…5 — маленькие, небольшие, средние, крупные, огромные. */
+    public static final String[] TILE_NAMES = {"Авто", "Маленькие", "Небольшие", "Средние", "Крупные", "Огромные"};
+    public static final float[] TILE_W = {0, 160, 200, 260, 340, 450};      // ширина плитки в условных пикселях (экран 1920 на 1080)
+    public int tileSize() { return Math.max(0, Math.min(5, sp.getInt("tileSize", 0))); }
+    public void setTileSize(int v) { sp.edit().putInt("tileSize", v).apply(); }
+    /** Положение сетки по вертикали: 0 сверху, 1 по центру, 2 снизу. */
+    public static final String[] PIN_NAMES = {"Сверху", "По центру", "Снизу"};
+    public int gridPin() { return Math.max(0, Math.min(2, sp.getInt("gridPin", 0))); }
+    public void setGridPin(int v) { sp.edit().putInt("gridPin", v).apply(); }
+    /** Выравнивание плиток в ряду: 0 по левому краю, 1 по центру, 2 по правому краю. */
+    public static final String[] ALIGN_NAMES = {"По левому краю", "По центру"};
+    public int gridAlign() { return Math.max(0, Math.min(1, sp.getInt("gridAlign", 0) == 1 ? 1 : 0)); }
+    public void setGridAlign(int v) { sp.edit().putInt("gridAlign", v).apply(); }
+    /** Переход по кругу внутри ряда: с последней плитки вправо — на первую, с первой влево — на последнюю. */
+    public boolean cycle() { return sp.getBoolean("cycle", false); }
+    public void setCycle(boolean v) { sp.edit().putBoolean("cycle", v).apply(); }
+    /** Переливающееся свечение вокруг выбранной плитки вместо обычной белой обводки. */
+    public boolean glow() { return sp.getBoolean("glow", false); }
+    public void setGlow(boolean v) { sp.edit().putBoolean("glow", v).apply(); }
+
+    /** Размер шрифта: 0 мелкий, 1 обычный (как раньше), 2 крупный, 3 очень крупный. */
+    public static final String[] FONT_NAMES = {"Мелкий", "Обычный", "Крупный", "Очень крупный"};
+    private static final float[] FONT_K = {0.88f, 1f, 1.12f, 1.25f};
+    public int fontSize() { return Math.max(0, Math.min(3, sp.getInt("font", 1))); }
+    public void setFontSize(int v) { sp.edit().putInt("font", v).apply(); UI.fs = FONT_K[v]; }
+
+    /** Избранные приложения («Все приложения» показывает их первыми): пакеты в порядке пользователя. */
+    public List<String> favs() { return split(sp.getString("favs", "")); }
+    public void setFavs(List<String> l) { sp.edit().putString("favs", join(l)).apply(); }
 
     public String vpnPkg() { return sp.getString("vpnPkg", ""); }
     public void setVpnPkg(String v) { sp.edit().putString("vpnPkg", v).apply(); }

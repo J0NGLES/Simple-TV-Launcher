@@ -50,8 +50,8 @@ final class Backdrop {
             }
             c.drawBitmap(frame, m, sp);
             if (dimAlpha > 0) c.drawColor(dimAlpha << 24);
-            stillSoft = blur(b, 1);
-            stillHard = blur(b, 2);
+            stillSoft = smooth(blur(b, 1));
+            stillHard = smooth(blur(b, 2));
             stillKey = key;
         } catch (Throwable ignored) { stillSoft = null; stillHard = null; stillKey = ""; }
     }
@@ -75,7 +75,7 @@ final class Backdrop {
             c.scale(b.getWidth() / (float) w, b.getHeight() / (float) h);
             capturing = true;
             try { d.draw(c); } finally { capturing = false; }
-            Bitmap s = blur(b, 2), hd = blur(b, 4);     // сквозь стекло угадываются плитки, но без резких краёв
+            Bitmap s = smooth(blur(b, 2)), hd = smooth(blur(b, 4));     // сквозь стекло угадываются плитки, но без резких краёв
             if (bg != null && bg.stillReady()) {        // цвет самого фона (кадр видео / картинка / градиент) поверх снимка
                 tint(s, stillSoft);
                 tint(hd, stillHard);
@@ -123,6 +123,24 @@ final class Backdrop {
         c.translate(B[0] - A[0], B[1] - A[1]);
         c.drawBitmap(bm, null, new RectF(0, 0, dw, dh), BP);
         c.restoreToCount(sc);
+    }
+
+    /**
+     * Маленькая размытая картинка при растяжении на весь экран даёт видимые «пиксели». Поэтому её один раз увеличивают вдвое-вчетверо
+     * с фильтрацией (до ~500 точек по ширине) и сглаживают ещё одним проходом: края блоков исчезают, а само размытие остаётся лёгким.
+     */
+    static Bitmap smooth(Bitmap src) {
+        Bitmap b = src;
+        for (int k = 0; k < 2 && b.getWidth() < 400; k++) b = Bitmap.createScaledBitmap(b, b.getWidth() * 2, b.getHeight() * 2, true);
+        if (b == src) return b;
+        int w = b.getWidth(), h = b.getHeight();
+        int[] px = new int[w * h];
+        b.getPixels(px, 0, w, 0, 0, w, h);
+        line(px, w, h, 2, true);
+        line(px, w, h, 2, false);
+        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        out.setPixels(px, 0, w, 0, 0, w, h);
+        return out;
     }
 
     static Bitmap blur(Bitmap src, int r) {

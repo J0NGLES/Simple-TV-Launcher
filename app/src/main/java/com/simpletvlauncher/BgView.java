@@ -291,8 +291,8 @@ public class BgView extends View {
         c.drawColor(0xFF07050B);
         cover(c, backdrop, bw, bh);
         drawDim(c, bw, bh);
-        // усреднение по площади (вдвое) и растяжение обратно с фильтрацией — мягкое небольшое размытие
-        blurredBmp = Bitmap.createScaledBitmap(b, Math.max(4, bw / 2), Math.max(4, bh / 2), true);
+        // настоящее размытие (три прохода — по сути гауссово) на уменьшенной копии; при растяжении на экран блоков не видно
+        blurredBmp = Backdrop.blur(b, 1);
         return blurredBmp;
     }
 

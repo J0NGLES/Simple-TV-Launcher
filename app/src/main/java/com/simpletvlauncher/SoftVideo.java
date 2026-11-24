@@ -37,7 +37,8 @@ final class SoftVideo {
     /** Тема больше не видео — файл не нужен. */
     static void forget(Context ctx) {
         Context c = ctx.getApplicationContext();
-        try { frameFile(c).delete(); new File(c.getFilesDir(), "bgvd.png").delete(); } catch (Throwable ignored) {}
+        // уходим с видеофона (градиент, картинка, автосмена обоев): кадр и сам видеофайл больше не нужны — освобождаем место
+        try { frameFile(c).delete(); new File(c.getFilesDir(), "bgvd.png").delete(); Bg.videoFile(c).delete(); } catch (Throwable ignored) {}
         cache = null; detailCache = null; cacheKey = "";
     }
 

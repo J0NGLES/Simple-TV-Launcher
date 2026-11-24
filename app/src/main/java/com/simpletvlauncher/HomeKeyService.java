@@ -87,12 +87,7 @@ public class HomeKeyService extends AccessibilityService {
             // пробуждение устройства: служба живёт и пока другое приложение на экране, поэтому может открыть приложение автозапуска и тогда
             if (wakeRx == null) {
                 wakeRx = new BroadcastReceiver() {
-                    @Override public void onReceive(Context c, Intent i) {
-                        Prefs p = new Prefs(HomeKeyService.this);
-                        final String pkg = p.autoApp();
-                        if (!p.wakeApp() || pkg.isEmpty() || Wake.afterBoot()) return;
-                        h.postDelayed(() -> Wake.openAuto(HomeKeyService.this, pkg), 1500);
-                    }
+                    @Override public void onReceive(Context c, Intent i) { Wake.wake(HomeKeyService.this); }
                 };
                 registerReceiver(wakeRx, new IntentFilter(Intent.ACTION_SCREEN_ON));
             }

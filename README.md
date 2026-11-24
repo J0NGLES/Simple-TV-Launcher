@@ -1,6 +1,6 @@
 # Simple TV Launcher
 
-**English** | [Русский](README.ru.md)
+**English** | [Русский](README.ru.md) | [Українська](README.ua.md)
 
 A lightweight tvOS-style Android TV launcher with a frosted-glass look: app tiles, weather, quick settings. No AndroidX, about 150 KB.
 
@@ -23,14 +23,16 @@ A lightweight tvOS-style Android TV launcher with a frosted-glass look: app tile
 **Download:** [latest release](https://github.com/J0NGLES/Simple-TV-Launcher/releases/latest) · **Discussion (Russian):** [4PDA](https://4pda.to/forum/index.php?showtopic=1129772)
 
 ## Features
-- App tiles with sorting, hiding, a configurable grid and wallpapers (image, video)
+- App tiles with sorting, hiding, favorites and a configurable grid: tile size (Auto to Huge), grid position (top / center / bottom), left or center alignment, optional cyclic navigation within a row
+- Wallpapers (image, video, gradient), adjustable blur, dimming and saturation, optional glow around the selected tile
 - Weather (MET Norway, 7Timer, Bright Sky); metric / US / UK units
 - Network indicator with a crossed-out icon when there is no internet access
 - Voice search via a chosen app, VPN and DPI client picker
 - Parental control (PIN) and "Granny mode"
+- Launch an app or return to the home screen when the device wakes from sleep; launch an app at boot
+- Font size (4 steps), 12/24-hour clock
 - Settings backup and restore
-- Russian and English UI (follows the system language)
-
+- Russian, English and Ukrainian UI (follows the system language)
 ## Wallpapers
 A [wallpaper pack on Google Drive](https://drive.google.com/file/d/1ou_BwechTGbiR9tA5E9WUOuZsPeq6Zew/) for the home screen. Their color and texture shape the look of the whole launcher, so try them together with blur, dimming and saturation. Video backgrounds can be found, for example, [here](https://ihaqdonate.com/resources/backgrounds); converting them to mp4 keeps them small and makes sure the launcher picks them up. Just put wallpapers and video backgrounds into internal storage and the app will find them.
 

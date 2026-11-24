@@ -63,14 +63,15 @@ public class SettingsActivity extends Activity {
         if (col.getChildCount() > 0) col.getChildAt(0).requestFocus();
     }
 
-    private static final int P_HOME = 1, P_BG = 2, P_WEATHER = 3, P_SAFE = 4, P_BACKUP = 5, P_SYS = 6, P_COUNT = 6;
+    private static final int P_HOME = 1, P_APPS = 2, P_BG = 3, P_WEATHER = 4, P_SAFE = 5, P_BACKUP = 6, P_SYS = 7, P_COUNT = 7;
     private int page;                      // 0 — список разделов, иначе номер раздела
     private TextView titleTv;
     private final List<GlassView> menuRows = new ArrayList<>();
 
     private String pageName(int p) {
         switch (p) {
-            case P_HOME: return L.t("Главный экран и сторонние интеграции");
+            case P_HOME: return L.t("Главный экран");
+            case P_APPS: return L.t("Приложения и сторонние интеграции");
             case P_BG: return L.t("Дизайн");
             case P_WEATHER: return L.t("Погода");
             case P_SAFE: return L.t("Защита");
@@ -88,6 +89,7 @@ public class SettingsActivity extends Activity {
         titleTv.setText(pageName(page));
         switch (page) {
             case P_HOME: buildHome(); break;
+            case P_APPS: buildApps(); break;
             case P_BG: buildBg(); break;
             case P_WEATHER: buildWeather(); break;
             case P_SAFE: buildSafe(); break;
@@ -131,10 +133,11 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildHome() {
-        row(L.t("Язык приложения"), this::langLabel, this::askLang);
-        row(L.t("Формат времени"), () -> prefs.clock12() ? L.t("12 часов") : L.t("24 часа"), () -> prefs.setClock12(!prefs.clock12()));
-        divider();
+        tileRow = row(L.t("Размер плиток"), () -> L.t(Prefs.TILE_NAMES[prefs.tileSize()]), this::askTile);
         slider(L.t("Приложений в ряду"), 4, 10, 1, prefs::cols, prefs::setCols, "");
+        row(L.t("Положение сетки приложений"), () -> L.t(Prefs.PIN_NAMES[prefs.gridPin()]), () -> askOpt(L.t("Положение сетки приложений"), Prefs.PIN_NAMES, prefs.gridPin(), prefs::setGridPin));
+        row(L.t("Выравнивание плиток"), () -> L.t(Prefs.ALIGN_NAMES[prefs.gridAlign()]), () -> askOpt(L.t("Выравнивание плиток"), Prefs.ALIGN_NAMES, prefs.gridAlign(), prefs::setGridAlign));
+        toggle(L.t("Циклический переход по ряду"), prefs::cycle, prefs::setCycle);
         toggle(L.t("Показывать дату и день недели"), prefs::showDate, prefs::setShowDate);
         toggle(L.t("Отображать название выбранного приложения"), prefs::showTitle, prefs::setShowTitle);
         toggle(L.t("Отображать подписи категорий"), prefs::showHdrs, prefs::setShowHdrs);
@@ -144,16 +147,45 @@ public class SettingsActivity extends Activity {
         toggle(L.t("Значок сети вверху"), prefs::showNetBtn, prefs::setShowNetBtn);
         toggle(L.t("Шестерня системных настроек вверху"), prefs::showGearBtn, prefs::setShowGearBtn);
         toggle(L.t("Кнопки настроек вверху вместо нижней панели"), prefs::panelTop, prefs::setPanelTop);
-        divider();
+    }
+
+    private void buildApps() {
         row(L.t("Клиент для VPN"), () -> vpnLabel(), this::askVpn);
         row(L.t("Приложение для поиска"), () -> searchLabel(), this::askSearch);
+        divider();
+        row(L.t("Избранные приложения"), () -> String.valueOf(prefs.favs().size()), () -> startActivity(new Intent(this, ManageActivity.class).putExtra("fav", true)));
         divider();
         row(L.t("Показать все скрытые приложения"), () -> prefs.hidden().size() + L.t(" скрыто"), this::askShowAll);
         row(L.t("Сбросить порядок плиток (по алфавиту)"), () -> "", this::askResetOrder);
     }
 
+    private GlassView tileRow;
+
+    private void askTile() {
+        GlassDialog.menu(this, L.t("Размер плиток"), Prefs.tr(Prefs.TILE_NAMES), prefs.tileSize(), i -> {
+            prefs.setTileSize(i);
+            build();
+            if (tileRow != null) tileRow.requestFocus();
+        }).show();
+    }
+
+    private interface IntOpt { void set(int v); }
+
+    private void askOpt(String title, String[] names, int cur, final IntOpt st) {
+        GlassDialog.menu(this, title, Prefs.tr(names), cur, i -> { st.set(i); refresh(); }).show();
+    }
+
+    private void askFont() {
+        GlassDialog.menu(this, L.t("Размер шрифта"), Prefs.tr(Prefs.FONT_NAMES), prefs.fontSize(), i -> {
+            prefs.setFontSize(i);
+            getIntent().putExtra("page", page);         // после пересоздания открывается тот же раздел
+            recreate();
+        }).show();
+    }
     private void buildBg() {
         int mode = prefs.bgMode();
+        toggle(L.t("Свечение выбранной плитки"), prefs::glow, prefs::setGlow);
+        divider();
         modeRow = row(L.t("Тип заднего фона"), () -> L.t(Prefs.BG_MODES[prefs.bgMode()]), this::askMode);
         if (mode == 0) {
             row(L.t("Цвет градиента"), () -> L.t(Prefs.THEME_NAMES[prefs.theme()]), this::askColor);
@@ -198,17 +230,22 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildSys() {
+        row(L.t("Язык приложения"), this::langLabel, this::askLang);
+        row(L.t("Формат времени"), () -> prefs.clock12() ? L.t("12 часов") : L.t("24 часа"), () -> prefs.setClock12(!prefs.clock12()));
+        row(L.t("Размер шрифта"), () -> L.t(Prefs.FONT_NAMES[prefs.fontSize()]), this::askFont);
+        divider();
         row(L.t("Сменить лаунчер по умолчанию"), () -> "", () -> { prepareVeil(); awaitHome = true; if (rootView != null) rootView.postDelayed(() -> awaitHome = false, 6000); UI.action(this, Settings.ACTION_HOME_SETTINGS); });
         row(L.t("Принудительно назначить Simple TV Launcher главным (через ADB или Root)"), () -> "", this::showForceHome);
         divider();
         // оба пункта включены по умолчанию, но без доступа к спецвозможностям не работают — пока он нужен, но не получен, рядом с «Вкл» жёлтый «!»
         warn(row(L.t("Кнопка домой ведёт в Simple TV Launcher (нужны спецвозможности)"), () -> prefs.homeKey() ? L.t("Вкл") : L.t("Выкл"), () -> prefs.setHomeKey(!prefs.homeKey())), prefs::homeKey);
         warn(row(L.t("Автозапуск лаунчера при включении устройства (нужны спецвозможности)"), () -> prefs.bootHome() ? L.t("Вкл") : L.t("Выкл"), () -> prefs.setBootHome(!prefs.bootHome())), prefs::bootHome);
+        toggle(L.t("Возвращаться на главный экран лаунчера при выходе из сна"), prefs::wakeHome, v -> { prefs.setWakeHome(v); if (v) prefs.setWakeApp(false); });
         final GlassView access = row(L.t("Доступ к спецвозможностям"), () -> HomeFix.isOn(this) ? L.t("Получен") : L.t("Отсутствует"), () -> HomeFix.showHelp(this, this::refresh));
         refreshers.add(() -> { access.tint = HomeFix.needed(this) ? 0x70FFB020 : 0; access.invalidate(); });     // подсвечена, пока доступ нужен, но не получен
         divider();
         row(L.t("Запускать выбранное приложение при включении устройства"), this::autoLabel, this::askAutoApp);
-        toggle(L.t("Запускать выбранное приложение при выходе из сна"), prefs::wakeApp, prefs::setWakeApp);
+        toggle(L.t("Запускать выбранное приложение при выходе из сна"), prefs::wakeApp, v -> { prefs.setWakeApp(v); if (v) prefs.setWakeHome(false); });
         divider();
         row(L.t("О приложении"), () -> L.t("версия ") + versionName(), this::showAbout);
     }
@@ -523,13 +560,14 @@ public class SettingsActivity extends Activity {
         String l = prefs.lang();
         if ("ru".equals(l)) return L.t("Русский");
         if ("en".equals(l)) return "English";
-        return L.t("Авто") + " (" + (L.en() ? "English" : L.t("Русский")) + ")";
+        if ("uk".equals(l)) return "Українська";
+        return L.t("Авто") + " (" + (L.en() ? "English" : L.uk() ? "Українська" : L.t("Русский")) + ")";
     }
 
     private void askLang() {
-        String[] names = {L.t("Авто (по системе)"), L.t("Русский"), "English"};
+        String[] names = {L.t("Авто (по системе)"), L.t("Русский"), "English", "Українська"};
         GlassDialog.menu(this, L.t("Язык приложения"), names, i -> {
-            prefs.setLang(i == 0 ? "auto" : i == 1 ? "ru" : "en");
+            prefs.setLang(new String[]{"auto", "ru", "en", "uk"}[i]);
             L.init(this);
             getIntent().putExtra("page", page);         // после пересоздания открывается тот же раздел
             recreate();         // экран заново строится на выбранном языке
