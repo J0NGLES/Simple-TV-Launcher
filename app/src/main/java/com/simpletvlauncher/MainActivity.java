@@ -1708,9 +1708,9 @@ public class MainActivity extends Activity {
         float w = tile.getWidth();
         float h = tile.getHeight();
         int foreground = tile.isFocused() ? 0xFF1B1B22 : 0xFFFFFFFF;
-        int iconColor = ColorUtil.alpha(foreground, inactive ? 120 : 255);
-        int labelColor = ColorUtil.alpha(foreground, inactive ? 184 : 245);
-        int subtitleColor = ColorUtil.alpha(foreground, inactive ? 164 : 222);
+        int iconColor = inactive ? ColorUtil.alpha(foreground, 145) : foreground;
+        int labelColor = inactive ? iconColor : ColorUtil.alpha(foreground, 245);
+        int subtitleColor = inactive ? iconColor : ColorUtil.alpha(foreground, 222);
         Icons.draw(canvas, tile.icon, w / 2, h * (showSubtitles ? 0.27f : 0.34f),
                 h * (showSubtitles ? 0.19f : 0.25f), tile.p, iconColor);
         tile.text(canvas, tile.label, w / 2, h * (showSubtitles ? 0.64f : 0.86f),
