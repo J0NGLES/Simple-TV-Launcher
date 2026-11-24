@@ -1678,10 +1678,24 @@ public class MainActivity extends Activity {
     /** Две строки текста одним блоком по центру высоты виджета: при любом размере шрифта блок не смещается вверх или вниз. */
     private void twoLines(Canvas c, GlassView v, float x, String a, float sa, int ca, String b, float sb, int cb, float mw) {
         float hh = v.getHeight(), f = UI.fs;
-        float ha = 0.72f * sa * hh * f, gap = 0.58f * (sa + sb) * hh * f;
-        float y1 = hh / 2f - (ha + gap) / 2f + ha;
-        v.text(c, a, x, y1, hh * sa, ca, 1, Paint.Align.LEFT, mw);
-        v.text(c, b, x, y1 + gap, hh * sb, cb, 1, Paint.Align.LEFT, mw);
+        float gap = 0.58f * (sa + sb) * hh * f;
+        v.tp.setTypeface(GlassView.REG);
+        float top = Float.POSITIVE_INFINITY, bottom = Float.NEGATIVE_INFINITY;
+        if (!a.isEmpty()) {
+            v.tp.setTextSize(hh * sa * f);
+            v.tp.getTextBounds(a, 0, a.length(), weatherTextBounds);
+            top = weatherTextBounds.top;
+            bottom = weatherTextBounds.bottom;
+        }
+        if (!b.isEmpty()) {
+            v.tp.setTextSize(hh * sb * f);
+            v.tp.getTextBounds(b, 0, b.length(), weatherTextBounds);
+            top = Math.min(top, gap + weatherTextBounds.top);
+            bottom = Math.max(bottom, gap + weatherTextBounds.bottom);
+        }
+        float baseline = top <= bottom ? (hh - top - bottom) / 2f : hh / 2f;
+        v.text(c, a, x, baseline, hh * sa, ca, 1, Paint.Align.LEFT, mw);
+        v.text(c, b, x, baseline + gap, hh * sb, cb, 1, Paint.Align.LEFT, mw);
     }
 
     private void paintWeatherPill(Canvas c, GlassView v) {
@@ -1698,7 +1712,7 @@ public class MainActivity extends Activity {
             return;
         }
         Weather.Pt p = wd.cur;
-        Icons.weather(c, p.icon, hh * 0.58f, hh * 0.50f, hh * 0.37f, v.tp);
+        Icons.weather(c, p.icon, hh * 0.58f, hh * 0.475f, hh * 0.37f, v.tp);
         String t = Weather.temp(p.t);
         float x = hh * 1.1f;
         float temperatureSize = hh * WEATHER_TEMP_SIZE;
