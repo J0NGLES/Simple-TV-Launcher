@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -1623,6 +1624,8 @@ public class MainActivity extends Activity {
         });
     }
 
+    private final Rect weatherTextBounds = new Rect();
+
     private String weatherSub(Weather.Pt p) {
         String sb = wd.city == null ? "" : wd.city;
         if (p.feel != null) sb += (sb.isEmpty() ? "" : " · ") + L.t("ощущается как ") + Weather.temp(p.feel);
@@ -1637,7 +1640,7 @@ public class MainActivity extends Activity {
             Paint pp = new Paint();
             Weather.Pt p = wd.cur;
             pp.setTypeface(GlassView.MED);
-            pp.setTextSize(ph * 0.53f * UI.fs);
+            pp.setTextSize(ph * 0.67f * UI.fs);
             float need = ph * 1.1f + pp.measureText(Weather.temp(p.t)) + ph * 0.25f + ph * 0.35f;
             pp.setTypeface(GlassView.REG);
             pp.setTextSize(ph * 0.295f * UI.fs);
@@ -1680,10 +1683,14 @@ public class MainActivity extends Activity {
             return;
         }
         Weather.Pt p = wd.cur;
-        Icons.weather(c, p.icon, hh * 0.58f, hh / 2f, hh * 0.3f, v.tp);
+        Icons.weather(c, p.icon, hh * 0.58f, hh * 0.52f, hh * 0.37f, v.tp);
         String t = Weather.temp(p.t);
         float x = hh * 1.1f;
-        v.text(c, t, x, hh / 2f + 0.33f * hh * 0.53f * UI.fs, hh * 0.53f, main, 2, Paint.Align.LEFT, 0);
+        float temperatureSize = hh * 0.67f;
+        v.tp.setTypeface(GlassView.MED);
+        v.tp.setTextSize(temperatureSize * UI.fs);
+        v.tp.getTextBounds(t, 0, t.length(), weatherTextBounds);
+        v.text(c, t, x, hh / 2f - weatherTextBounds.exactCenterY(), temperatureSize, main, 2, Paint.Align.LEFT, 0);
         float x2 = x + v.tp.measureText(t) + hh * 0.25f, mw = w - x2 - hh * 0.35f;
         twoLines(c, v, x2, p.desc == null ? "" : p.desc, 0.295f, dark ? main : 0xF2FFFFFF, weatherSub(p), 0.25f, sub, mw);
     }
