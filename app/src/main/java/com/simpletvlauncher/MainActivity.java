@@ -1742,7 +1742,7 @@ public class MainActivity extends Activity {
                     .setDataAndType(uri, android.media.tv.TvContract.Channels.CONTENT_ITEM_TYPE)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (android.content.ActivityNotFoundException | SecurityException e) {
-            android.widget.Toast.makeText(this, L.t("Не удалось переключить источник"), android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, L.t("Не удалось переключить вход"), android.widget.Toast.LENGTH_SHORT).show();
         }
     }
 
