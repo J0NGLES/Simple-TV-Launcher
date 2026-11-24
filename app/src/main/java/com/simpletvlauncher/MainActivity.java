@@ -658,7 +658,7 @@ public class MainActivity extends Activity {
         btnSearch.title = L.t("Поиск");
         btnSearch.setOnClickListener(v -> onSearchClick(false));
         btnSearch.setOnLongClickListener(v -> { onSearchClick(true); return true; });
-        btnSource.title = L.t("Входы");
+        btnSource.title = L.t("Источник сигнала");
         btnSource.setOnClickListener(v -> pickSource());
         btnVpn.setOnClickListener(v -> onVpnClick());
         btnVpn.setOnLongClickListener(v -> { pickVpnClient(); return true; });
@@ -796,7 +796,7 @@ public class MainActivity extends Activity {
         appsHdr = UI.text(this, L.t("ПРИЛОЖЕНИЯ"), 21 * s, 0x99FFFFFF, GlassView.MED);
         appsHdr.setLetterSpacing(0.2f);
         placeC(appsHdr, mx, 14 * s, W - 2 * mx, 36 * s);
-        inputsHdr = UI.text(this, L.t("Входы").toUpperCase(L.locale()), 21 * s, 0x99FFFFFF, GlassView.MED);
+        inputsHdr = UI.text(this, L.t("Источник сигнала").toUpperCase(L.locale()), 21 * s, 0x99FFFFFF, GlassView.MED);
         inputsHdr.setLetterSpacing(0.2f);
         inputsHdr.setVisibility(View.GONE);
         placeC(inputsHdr, mx, 0, 600 * s, 36 * s);
@@ -1742,7 +1742,7 @@ public class MainActivity extends Activity {
                     .setDataAndType(uri, android.media.tv.TvContract.Channels.CONTENT_ITEM_TYPE)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (android.content.ActivityNotFoundException | SecurityException e) {
-            android.widget.Toast.makeText(this, L.t("Не удалось переключить вход"), android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, L.t("Не удалось переключить источник"), android.widget.Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1750,7 +1750,7 @@ public class MainActivity extends Activity {
         if (openSystemSourcePanel()) return;
         refreshInputs();
         if (inputs.isEmpty()) {
-            android.widget.Toast.makeText(this, L.t("Входы не найдены"), android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, L.t("Источники сигнала не найдены"), android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
         String[] names = new String[inputs.size()];
@@ -1761,7 +1761,7 @@ public class MainActivity extends Activity {
             kinds[i] = sourceIcon(in, names[i]);
         }
         List<android.media.tv.TvInputInfo> choices = new ArrayList<>(inputs);
-        show(GlassDialog.menuIcons(this, L.t("Входы"), names, kinds, i -> openInput(choices.get(i).getId())));
+        show(GlassDialog.menuIcons(this, L.t("Источник сигнала"), names, kinds, i -> openInput(choices.get(i).getId())));
     }
 
     // ------------------------------------------------------------ погода
