@@ -143,9 +143,9 @@ public class SettingsActivity extends Activity {
         row(L.t("Размер названия приложения"), () -> L.t(Prefs.TITLE_NAMES[prefs.titleSize()]), () -> askOpt(L.t("Размер названия приложения"), Prefs.TITLE_NAMES, prefs.titleSize(), prefs::setTitleSize));
         toggle(L.t("Отображать подписи категорий"), prefs::showHdrs, prefs::setShowHdrs);
         toggle(L.t("Кнопка поиска вверху"), prefs::showSearchBtn, prefs::setShowSearchBtn);
-        toggle(L.t("Кнопка выбора источника сигнала"), prefs::showSourceBtn, prefs::setShowSourceBtn);
-        toggle(L.t("Ряд источников сигнала на главном экране"), prefs::showInputsRow, prefs::setShowInputsRow);
-        toggle(L.t("Приглушать неактивные источники сигнала"), prefs::dimInactiveInputs, prefs::setDimInactiveInputs);
+        toggle(L.t("Кнопка «Входы»"), prefs::showSourceBtn, prefs::setShowSourceBtn);
+        toggle(L.t("Показывать входы на главном экране"), prefs::showInputsRow, prefs::setShowInputsRow);
+        toggle(L.t("Приглушать неактивные входы"), prefs::dimInactiveInputs, prefs::setDimInactiveInputs);
         toggle(L.t("Значок VPN вверху"), prefs::showVpnBtn, prefs::setShowVpnBtn);
         toggle(L.t("Значок сети вверху"), prefs::showNetBtn, prefs::setShowNetBtn);
         toggle(L.t("Шестерня системных настроек вверху"), prefs::showGearBtn, prefs::setShowGearBtn);
