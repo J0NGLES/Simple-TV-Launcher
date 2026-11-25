@@ -10,7 +10,7 @@ public final class Icons {
     public static final int GEAR = 1, WIFI = 2, ETH = 3, GRID = 5, LIST = 6, TUNE = 7,
             ETH_NOINET = 30, WIFI_OFF = 8, REFRESH = 10, IMAGE = 14, INPUT = 15, VPN = 16, SEARCH = 17, LOCK = 18,
             SRC_HDMI = 20, SRC_DP = 21, SRC_AV = 22, SRC_SVIDEO = 23, SRC_COMPONENT = 24,
-            SRC_VGA = 25, SRC_DVI = 26, SRC_SCART = 27, SRC_TUNER = 28;
+            SRC_VGA = 25, SRC_DVI = 26, SRC_SCART = 27, SRC_TUNER = 28, EYE = 31;
 
     private Icons() {}
 
@@ -27,7 +27,7 @@ public final class Icons {
         return hi < lo ? 0f : ((lo + hi + 1) / 2f - w / 2f) / w;
     }
 
-    /** Значки хранятся как векторные ресурсы (в несколько раз легче PNG); один раз рисуем их в крупную картинку, дальше всё как раньше. */
+    /** Значки хранятся как векторные ресурсы (в несколько раз легче PNG); один раз рисуем их в картинку с запасом под 4K и смягчение углов (крупнее не нужно: лишние мегабайты ОЗУ), дальше всё как раньше. */
     private static android.graphics.Bitmap vector(android.content.Context c, int res, int w, int h) {
         try {
             android.graphics.drawable.Drawable d = c.getResources().getDrawable(res, null);
@@ -39,10 +39,10 @@ public final class Icons {
     }
 
     public static void init(android.content.Context c) {
-        if (refreshBmp == null) refreshBmp = vector(c, R.drawable.ic_refresh, 512, 512);
-        if (gearBmp == null) gearBmp = vector(c, R.drawable.ic_gear, 777, 777);
-        if (vpnBmp == null) vpnBmp = vector(c, R.drawable.ic_vpn, 470, 256);
-        if (srcBmp == null) srcBmp = vector(c, R.drawable.ic_src, 824, 768);
+        if (refreshBmp == null) refreshBmp = vector(c, R.drawable.ic_refresh, 200, 200);
+        if (gearBmp == null) gearBmp = vector(c, R.drawable.ic_gear, 192, 192);
+        if (vpnBmp == null) vpnBmp = vector(c, R.drawable.ic_vpn, 320, 174);
+        if (srcBmp == null) srcBmp = vector(c, R.drawable.ic_src, 160, 149);
         if (ethBmp == null) ethBmp = vector(c, R.drawable.ic_eth, 208, 176);
     }
 
@@ -333,6 +333,20 @@ public final class Icons {
                 c.drawPath(PATH, p);
                 p.setStyle(Paint.Style.FILL);
                 c.drawCircle(cx + r * 0.38f, cy - r * 0.25f, r * 0.1f, p);
+                break;
+            }
+            case EYE: {
+                // открытый глаз: контур-миндалина и радужка, всё линиями и кругом (ни картинок, ни памяти)
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(r * 0.17f);
+                PATH.reset();
+                PATH.moveTo(cx - r * 1.4f, cy);
+                PATH.cubicTo(cx - r * 0.7f, cy - r * 1.0f, cx + r * 0.7f, cy - r * 1.0f, cx + r * 1.4f, cy);
+                PATH.cubicTo(cx + r * 0.7f, cy + r * 1.0f, cx - r * 0.7f, cy + r * 1.0f, cx - r * 1.4f, cy);
+                PATH.close();
+                c.drawPath(PATH, p);
+                p.setStyle(Paint.Style.FILL);
+                c.drawCircle(cx, cy, r * 0.46f, p);
                 break;
             }
             case REFRESH: {

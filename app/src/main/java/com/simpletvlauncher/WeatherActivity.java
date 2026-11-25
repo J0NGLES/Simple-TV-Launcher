@@ -178,7 +178,9 @@ public class WeatherActivity extends Activity {
 
         // --- ближайшие часы
         TextView hl = UI.text(this, L.t("Ближайшие часы"), 30 * s, 0xCCFFFFFF, GlassView.MED);
-        put(content, hl, 96, 506, 800, 40 + 40 * (UI.fs - 1f));
+        final float lh = 40 + 40 * (UI.fs - 1f), lg = 8;       // высота подписи и зазор между подписью и карточками — одинаковые у обоих рядов
+        final float hy = 506 + lh + lg, dly = hy + 176 + 20, dy = dly + lh + lg;
+        put(content, hl, 96, 506, 800, lh);
         List<Weather.Pt> hours = new ArrayList<>();
         long now = System.currentTimeMillis() / 1000;
         for (Weather.Pt p : d.h3) if (p.unix >= now - 5400 && hours.size() < 8) hours.add(p);
@@ -193,12 +195,12 @@ public class WeatherActivity extends Activity {
                 Icons.weather(c, p.icon, w / 2f, hh * 0.41f, hh * 0.165f, v.tp);
                 v.text(c, Weather.temp(p.t), w / 2f, hh * 0.8f, hh * 0.19f, 0xFFFFFFFF, 2, Paint.Align.CENTER, 0);
             };
-            put(content, g, 96 + i * (hw + 16), 552, hw, 176);
+            put(content, g, 96 + i * (hw + 16), hy, hw, 176);
         }
 
         // --- по дням
         TextView dl = UI.text(this, L.t("Прогноз по дням"), 30 * s, 0xCCFFFFFF, GlassView.MED);
-        put(content, dl, 96, 748, 800, 40 + 40 * (UI.fs - 1f));
+        put(content, dl, 96, dly, 800, lh);
         List<Weather.Pt> days = new ArrayList<>();
         for (Weather.Pt p : d.h24) if (p.unix >= now - 86400 && days.size() < 10) days.add(p);
         View firstDay = null;
@@ -228,7 +230,7 @@ public class WeatherActivity extends Activity {
             g.setOnFocusChangeListener((v, has) -> {
                 if (has) { selected = p; detail.invalidate(); }
             });
-            put(content, g, 96 + i * (dw + 16), 792 + 80 * (UI.fs - 1f), dw, 232);
+            put(content, g, 96 + i * (dw + 16), dy, dw, 232);
             if (firstDay == null) firstDay = g;
         }
         if (firstDay != null) firstDay.requestFocus(); else btnRefresh.requestFocus();

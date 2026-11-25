@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
     private GlassView weatherPill, capsule, btnVpn, btnNet, btnGear, btnSource, btnSearch, btnApps, btnLauncher;
     private int langV;                  // версия языка, с которой построен экран
     private float fsBuilt;              // размер шрифта, с которым построен экран
+    private float tkBuilt;              // размер названия приложения, с которым построен экран
     private long lastHome = -10000;
     private static final long UNLOCK_MS = 3 * 60 * 1000L;
     private static long unlockUntil;    // общее для всего приложения время, а не число входов: после жеста всё открыто ровно 3 минуты          // «режим для бабушек»: до этого момента меню временно разблокировано
@@ -217,6 +218,7 @@ public class MainActivity extends Activity {
         L.init(this);
         langV = L.version;
         fsBuilt = UI.fs;
+        tkBuilt = prefs.titleK();
         Icons.init(this);
         android.util.DisplayMetrics m = getResources().getDisplayMetrics();
         W = m.widthPixels;
@@ -333,7 +335,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         L.init(this);
-        if (L.version != langV || screenChanged() || fsBuilt != UI.fs) { recreate(); return; }      // сменили язык, размер шрифта или разрешение — экран строится заново
+        if (L.version != langV || screenChanged() || fsBuilt != UI.fs || tkBuilt != prefs.titleK()) { recreate(); return; }      // сменили язык, размер шрифта или разрешение — экран строится заново
         resumed = true;
         Frost.bg = bg;      // другие экраны подменяют его своим фоном
         if (!sigOf().equals(sig)) {
@@ -743,8 +745,9 @@ public class MainActivity extends Activity {
 
     private void buildTexts() {
         shelfTitle = UI.text(this, "", 68 * s, 0xFFFFFFFF, GlassView.LIGHT);
+        shelfTitle.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 68 * s * titleF());      // общий размер шрифта и размер названия перемножаются
         shelfTitle.setLetterSpacing(-0.02f);
-        place(shelfTitle, mx, 197 * s, W - 2 * mx, 90 * s);
+        place(shelfTitle, mx, 197 * s, W - 2 * mx, 90 * s * Math.max(1f, prefs.titleK()));
 
         appsHdr = UI.text(this, L.t("ПРИЛОЖЕНИЯ"), 21 * s, 0x99FFFFFF, GlassView.MED);
         appsHdr.setLetterSpacing(0.2f);
@@ -884,13 +887,16 @@ public class MainActivity extends Activity {
      */
     private void geom() {
         boolean ti = prefs.showTitle(), hd = prefs.showHdrs();
-        float top = ti ? (hd ? 335 : 325) + 80 * (UI.fs - 1f) : (194 + (hd ? 48 : 0));      // при крупном шрифте под названием больше места до подписи категории       // верх матовой панели от верха экрана, в условных пикселях
+        float top = ti ? (hd ? 335 : 325) + (titleF() > 1f ? 115 : 80) * (titleF() - 1f) : (194 + (hd ? 48 : 0));      // при крупном шрифте под названием больше места до подписи категории       // верх матовой панели от верха экрана, в условных пикселях
         vy = (top - 62) * s;
         frostTop = top * s;
         placeNotice();
         botGap = (hd ? 131 : 64) * s;                                    // от низа панели до нижних кнопок
         applyPin();
     }
+
+    /** Множитель размера названия приложения на главном экране: общий размер шрифта умножается на выбранное «меньше / стандарт / крупнее». */
+    private float titleF() { return UI.fs * prefs.titleK(); }
 
     private float autoTop;     // при малом числе рядов свободное место делится между верхним и нижним промежутками (положение сетки «сверху»)
     private float pinOff;       // на сколько сетка опущена вниз (положение «по центру» и «снизу»)
@@ -908,7 +914,7 @@ public class MainActivity extends Activity {
             lp.height = Math.round((root.getHeight() > 0 ? root.getHeight() : H) - vy - pinOff);
             moveTo(sv, 0, vy + pinOff);
         }
-        if (shelfTitle != null) moveTo(shelfTitle, mx + gridOff, 197 * s + 56 * (UI.fs - 1f) * s + pinOff);      // при крупном шрифте название чуть ниже, подальше от плашки
+        if (shelfTitle != null) moveTo(shelfTitle, mx + gridOff, 197 * s + 56 * (titleF() - 1f) * s + pinOff);      // при крупном шрифте название чуть ниже, подальше от плашки
         placeNotice();
     }
 

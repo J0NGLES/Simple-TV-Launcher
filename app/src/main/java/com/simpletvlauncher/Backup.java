@@ -40,7 +40,7 @@ public final class Backup {
         public Uri uri;
         public String name;
         public long size, time;
-        public String bg = "", grid = "";
+        public String bg = "", grid = "", pos = "", glow = "";
         public boolean ok = true;          // false: файл есть, но восстановить из него нельзя
         public String problem = "";
     }
@@ -151,14 +151,29 @@ public final class Backup {
             if (mode == 1 && !jpg) bg += L.t(" (файла нет)");
             if (mode == 2 && !mp4) bg += L.t(" (файла нет)");
             int cols = root.has("cols") ? root.getJSONObject("cols").optInt("v", 7) : 7;
-            cols = Math.max(4, Math.min(10, cols));
+            cols = Math.max(4, Math.min(12, cols));
+            if (mode == 1) bg += " \u00b7 " + L.t("размытие: ") + Math.max(0, Math.min(100, intOf(root, "bgBlur", 0))) + " %";
             it.bg = L.t("Фон: ") + bg;
-            it.grid = L.t("Сетка: ") + cols + L.t(" в ряду");
+            int tile = Math.max(0, Math.min(5, intOf(root, "tileSize", 0)));
+            int pin = Math.max(0, Math.min(2, intOf(root, "gridPin", 0)));
+            int al = intOf(root, "gridAlign", 0) == 1 ? 1 : 0;
+            boolean gl = root.has("glow") && root.getJSONObject("glow").optBoolean("v", false);
+            boolean showTitle = !root.has("showTitle") || root.getJSONObject("showTitle").optBoolean("v", true);
+            int font = Math.max(0, Math.min(2, intOf(root, "font", 1)));
+            java.util.Locale lc = L.locale();
+            it.grid = L.t("Сетка: ") + cols + L.t(" в ряду") + " \u00b7 " + L.t("плитки: ") + L.t(Prefs.TILE_NAMES[tile]).toLowerCase(lc) + " \u00b7 " + L.t("названия: ") + L.t(showTitle ? "вкл" : "выкл");
+            it.pos = L.t("Положение: ") + L.t(Prefs.PIN_NAMES[pin]).toLowerCase(lc) + " \u00b7 " + L.t("центровка: ") + L.t(Prefs.ALIGN_NAMES[al]).toLowerCase(lc);
+            it.glow = L.t("Свечение: ") + L.t(gl ? "включено" : "выключено") + " \u00b7 " + L.t("шрифт: ") + L.t(Prefs.FONT_NAMES[font]).toLowerCase(lc);
         } catch (Throwable t) {
             it.ok = false;
             it.problem = L.t("Файл повреждён или создан другой версией, прочитать его не удалось");
         }
     }
+    /** Целое значение настройки из копии (если её там нет — значение по умолчанию, как и при восстановлении). */
+    private static int intOf(JSONObject root, String key, int def) throws Exception {
+        return root.has(key) ? root.getJSONObject(key).optInt("v", def) : def;
+    }
+
     private static byte[] build(Context c) throws Exception {
         SharedPreferences sp = new Prefs(c).raw();
         JSONObject root = new JSONObject();

@@ -134,12 +134,13 @@ public class SettingsActivity extends Activity {
 
     private void buildHome() {
         tileRow = row(L.t("Размер плиток"), () -> L.t(Prefs.TILE_NAMES[prefs.tileSize()]), this::askTile);
-        slider(L.t("Приложений в ряду"), 4, 10, 1, prefs::cols, prefs::setCols, "");
+        slider(L.t("Приложений в ряду"), 4, 12, 1, prefs::cols, prefs::setCols, "");
         row(L.t("Положение сетки приложений"), () -> L.t(Prefs.PIN_NAMES[prefs.gridPin()]), () -> askOpt(L.t("Положение сетки приложений"), Prefs.PIN_NAMES, prefs.gridPin(), prefs::setGridPin));
         row(L.t("Выравнивание плиток"), () -> L.t(Prefs.ALIGN_NAMES[prefs.gridAlign()]), () -> askOpt(L.t("Выравнивание плиток"), Prefs.ALIGN_NAMES, prefs.gridAlign(), prefs::setGridAlign));
         toggle(L.t("Циклический переход по ряду"), prefs::cycle, prefs::setCycle);
         toggle(L.t("Показывать дату и день недели"), prefs::showDate, prefs::setShowDate);
         toggle(L.t("Отображать название выбранного приложения"), prefs::showTitle, prefs::setShowTitle);
+        row(L.t("Размер названия приложения"), () -> L.t(Prefs.TITLE_NAMES[prefs.titleSize()]), () -> askOpt(L.t("Размер названия приложения"), Prefs.TITLE_NAMES, prefs.titleSize(), prefs::setTitleSize));
         toggle(L.t("Отображать подписи категорий"), prefs::showHdrs, prefs::setShowHdrs);
         toggle(L.t("Кнопка поиска вверху"), prefs::showSearchBtn, prefs::setShowSearchBtn);
         toggle(L.t("Кнопка выбора источника сигнала"), prefs::showSourceBtn, prefs::setShowSourceBtn);
@@ -295,6 +296,7 @@ public class SettingsActivity extends Activity {
             left = true;
             value = g.get() + unit;
         }
+
 
         @Override public boolean onKeyDown(int k, android.view.KeyEvent e) {
             if (k == android.view.KeyEvent.KEYCODE_DPAD_LEFT || k == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {

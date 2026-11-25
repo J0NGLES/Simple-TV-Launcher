@@ -183,11 +183,14 @@ public class BackupPickerActivity extends Activity {
     private void paintCard(Canvas c, GlassView v, String date, String time, Backup.Item it) {
         int w = v.getWidth(), h = v.getHeight();
         float pad = h * 0.1f;
-        v.text(c, date, pad, h * 0.25f, h * 0.15f, 0xFFFFFFFF, 2, Paint.Align.LEFT, w - 2 * pad);
-        v.text(c, time, pad, h * 0.46f, h * 0.17f, 0xF2FFFFFF, 0, Paint.Align.LEFT, w - 2 * pad);
+        v.text(c, date, pad, h * 0.22f, h * 0.15f, 0xFFFFFFFF, 2, Paint.Align.LEFT, w - 2 * pad);
+        v.text(c, time, pad, h * 0.40f, h * 0.17f, 0xF2FFFFFF, 0, Paint.Align.LEFT, w - 2 * pad);
         if (it.ok) {
-            v.text(c, it.bg, pad, h * 0.67f, h * 0.088f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
-            v.text(c, it.grid, pad, h * 0.85f, h * 0.088f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
+            float f = h * 0.075f;
+            v.text(c, it.bg, pad, h * 0.53f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
+            v.text(c, it.grid, pad, h * 0.65f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
+            v.text(c, it.pos, pad, h * 0.77f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
+            v.text(c, it.glow, pad, h * 0.89f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
         } else {
             v.text(c, L.t("Восстановить нельзя"), pad, h * 0.67f, h * 0.088f, 0xFFFF9A8A, 2, Paint.Align.LEFT, w - 2 * pad);
             v.text(c, L.t("Копия другой версии или повреждена"), pad, h * 0.85f, h * 0.075f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);

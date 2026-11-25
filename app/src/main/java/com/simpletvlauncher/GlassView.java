@@ -34,6 +34,7 @@ public class GlassView extends View {
     public boolean blurBack;          // dialog row: blurred backdrop snapshot
     public int tint;                 // строка настроек: заливка другим цветом (0 — нет)
     public boolean warn;            // строка настроек: жёлтый «!» перед названием
+    public int eye;                 // строка списка приложений: 1 — глаз (показано, 100%), 2 — тот же глаз вполсилы (скрыто)
     public boolean lock;            // строка списка приложений: замок (приложение под PIN-кодом)
     public boolean plain;           // без собственного стекла (кнопка внутри капсулы)
     public float focusScale = 1.08f;
@@ -212,6 +213,12 @@ public class GlassView extends View {
                 x += h * 0.52f + pad * 0.7f;
             }
             float vw = 0;
+            if (eye != 0) {         // большой глаз справа: показано — полностью, скрыто — 10 %
+                float er = h * 0.3f;
+                int ec = dk ? 0xFF55555F : 0xFFFFFFFF;
+                Icons.draw(c, Icons.EYE, w - pad - er * 1.4f, h / 2f, er, p, ColorUtil.alpha(ec, eye == 1 ? 255 : 26));
+                vw = er * 2.8f + pad;
+            }
             if (value != null) {
                 tp.setTypeface(REG);
                 tp.setTextSize(h * 0.30f * UI.fs);

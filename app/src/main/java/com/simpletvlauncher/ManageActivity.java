@@ -7,9 +7,9 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.List;
@@ -25,7 +25,7 @@ public class ManageActivity extends Activity {
     private float s;
     private boolean manage, favMode;
     private LinearLayout col;
-    private ScrollView sv;
+    private Snap sv;
     private TextView sub;
     private List<AppRepo.AppItem> all;
 
@@ -48,7 +48,7 @@ public class ManageActivity extends Activity {
 
         TextView cap = UI.text(this, L.t("Отображение на главном экране"), 22 * s, 0x80FFFFFF, GlassView.REG);
         cap.setGravity(android.view.Gravity.RIGHT | android.view.Gravity.CENTER_VERTICAL);
-        cap.setPadding(0, 0, Math.round(50 * s), 0);       // правый край — над столбцом «Показано» / «Скрыто»
+        cap.setPadding(0, 0, Math.round(38.4f * s), 0);       // правый край — над столбцом «Показано» / «Скрыто»
         FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(Math.round(W - 192 * s), Math.round(40 * s));
         cl.leftMargin = Math.round(96 * s);
         cl.topMargin = Math.round(132 * s);
@@ -66,7 +66,10 @@ public class ManageActivity extends Activity {
         // на экране только целые кнопки: список прокручивается ровно на строку, а то, что не помещается целиком, не рисуется
         sv.getViewTreeObserver().addOnGlobalFocusChangeListener((o, n) -> {
             if (n == null || n.getParent() != col) return;
-            snapTo(n);       // сразу, до отрисовки: иначе один кадр выбранная строка рисуется вне видимой области
+            Object t = n.getTag();
+            if (t instanceof String) lastPkg = (String) t;
+            lastIdx = rows().indexOf(n);
+            if (!rebuilding) snapTo(n);       // сразу, до отрисовки: иначе один кадр выбранная строка рисуется вне видимой области
         });
         col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -79,7 +82,12 @@ public class ManageActivity extends Activity {
         setContentView(root);
     }
 
-    private int tgt;        // положение прокрутки, к которому идёт список (всегда начало какой-нибудь строки)
+    private int tgt;                // положение прокрутки, к которому идёт список (начало какой-нибудь строки)
+    private int first;              // номер строки, с которой начинается видимая часть списка
+    private String lastPkg;         // приложение, на котором стоял фокус (чтобы вернуть его после перестройки списка)
+    private int lastIdx;            // и номер его строки, если приложения уже нет в списке (например, удалили)
+    private boolean rebuilding;     // список только что перестроен и ещё не разложен по экрану: прокручивать рано
+    private ViewTreeObserver.OnPreDrawListener pre;
 
     private int margin() { return Math.round(8 * s); }
 
@@ -89,26 +97,53 @@ public class ManageActivity extends Activity {
         return r;
     }
 
-    /** Прокрутка: выбранная строка видна целиком, список сдвигается ровно на строку и всегда начинается с начала строки. */
-    private void snapTo(View n) {
+    /** Считает, к какому положению прокрутить список, чтобы строка n была видна целиком (список всегда начинается с начала строки). */
+    private void aim(View n) {
         List<View> rows = rows();
-        int idx = rows.indexOf(n), m = margin(), hgt = sv.getHeight(), f = 0;
+        int idx = rows.indexOf(n), m = margin(), hgt = sv.getHeight();
         if (idx < 0) return;
-        for (int k = 0; k < rows.size(); k++) if (rows.get(k).getTop() - m <= tgt) f = k;
-        if (idx < f) f = idx;
-        else while (f < idx && n.getBottom() > rows.get(f).getTop() - m + hgt) f++;
-        tgt = Math.max(0, rows.get(f).getTop() - m);
-        sv.smoothScrollTo(0, tgt);
-        sv.invalidate();
+        first = Math.max(0, Math.min(first, rows.size() - 1));
+        if (idx < first) first = idx;
+        else while (first < idx && n.getBottom() > rows.get(first).getTop() - m + hgt) first++;
+        tgt = Math.min(Math.max(0, rows.get(first).getTop() - m), sv.max());
     }
 
-    /** Список без собственной «доводки» выбранной строки (её делает snapTo) и с обрезкой по нижней целой строке. */
-    private class Snap extends ScrollView {
+    private void snapTo(View n) {
+        aim(n);
+        sv.jump(tgt);       // без плавной анимации: список двигается сразу вместе с выделением
+    }
+
+    /**
+     * Свой список вместо ScrollView: тот сам «доводит» выбранную строку на экран в момент перестройки списка и сбивает
+     * положение (то обрезанная строка сверху, то пустой экран). Здесь прокручивается только то, что решили мы.
+     */
+    private class Snap extends FrameLayout {
         Snap(android.content.Context c) { super(c); }
 
-        @Override public boolean requestChildRectangleOnScreen(View child, android.graphics.Rect r, boolean immediate) { return false; }
+        @Override protected void onMeasure(int ws, int hs) {
+            int w = MeasureSpec.getSize(ws), h = MeasureSpec.getSize(hs);
+            setMeasuredDimension(w, h);
+            View c = getChildAt(0);
+            if (c != null) c.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+        }
+
+        int max() {
+            View c = getChildAt(0);
+            return c == null ? 0 : Math.max(0, c.getHeight() - getHeight());
+        }
+
+        void jump(int y) {
+            scrollTo(0, y);
+        }
 
         @Override protected void dispatchDraw(android.graphics.Canvas c) {
+            // выделение не должно уходить от видимой области дальше чем на строку: если ушло (кадры не успевали) — список догоняет мгновенно
+            View f = col.getFocusedChild();
+            if (f != null && !rebuilding) {
+                int sy = getScrollY(), row = Math.round(98 * s);
+                int off = f.getTop() < sy ? sy - f.getTop() : Math.max(0, f.getBottom() - (sy + getHeight()));
+                if (off > row) { aim(f); jump(tgt); }
+            }
             int lim = tgt + getHeight(), best = 0;
             for (View v : rows()) if (v.getBottom() <= lim) best = Math.max(best, v.getBottom());
             if (best == 0) { super.dispatchDraw(c); return; }
@@ -139,11 +174,10 @@ public class ManageActivity extends Activity {
 
     private void populate() { populate(null); }
 
-    /** focusPkg — приложение, на которое вернуть фокус после перестройки списка (иначе остаёмся на той же позиции). */
+    /** focusPkg — приложение, на которое вернуть фокус после перестройки списка (иначе на то, где он стоял; если его уже нет — на ту же позицию). */
     private void populate(String focusPkg) {
-        int focusIdx = 0;
-        View f = getCurrentFocus();
-        if (f != null) focusIdx = Math.max(0, col.indexOfChild(f));
+        if (focusPkg == null) focusPkg = lastPkg;
+        final int prevIdx = lastIdx;
         col.removeAllViews();
         int want = -1, n = 0;
         final List<AppRepo.AppItem> lst = AppRepo.favFirst(all, prefs);
@@ -155,6 +189,7 @@ public class ManageActivity extends Activity {
             r.appIcon = a.icon;
             r.radius = 22 * s;
             r.focusScale = 1.02f;
+            r.setTag(a.pkg);
             style(r, a);
             r.setOnClickListener(v -> {
                 if (favMode) toggleFav(a); else menu(r, a);     // OK: открыть, показать/скрыть, избранное, удалить, о приложении
@@ -179,18 +214,39 @@ public class ManageActivity extends Activity {
             }
             n++;
         }
-        if (want >= 0) focusIdx = want;
         updateSub();
-        // разделитель не фокусируется — берём ближайший ряд вверх
-        for (int k = Math.min(focusIdx, col.getChildCount() - 1); k >= 0; k--) {
-            if (col.getChildAt(k).isFocusable()) { col.getChildAt(k).requestFocus(); break; }
+        View target = want >= 0 ? col.getChildAt(want) : null;
+        if (target == null) {                  // приложения больше нет (удалили) или фокуса ещё не было: та же позиция
+            List<View> rs = rows();
+            if (!rs.isEmpty()) target = rs.get(Math.max(0, Math.min(prevIdx, rs.size() - 1)));
         }
+        if (pre != null && sv.getViewTreeObserver().isAlive()) sv.getViewTreeObserver().removeOnPreDrawListener(pre);
+        pre = null;
+        if (target == null) { rebuilding = false; return; }
+        final View ft = target;
+        rebuilding = true;           // пока строки не разложены по экрану, положение прокрутки не считаем
+        ft.requestFocus();
+        // как только список разложен, но ещё до первого кадра — ставим прокрутку так, чтобы выбранная строка была видна целиком
+        pre = new ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                if (sv.getViewTreeObserver().isAlive()) sv.getViewTreeObserver().removeOnPreDrawListener(this);
+                pre = null;
+                rebuilding = false;
+                View fv = getCurrentFocus();
+                if (fv == null || fv.getParent() != col) fv = ft;
+                aim(fv);
+                sv.jump(tgt);
+                return true;
+            }
+        };
+        sv.getViewTreeObserver().addOnPreDrawListener(pre);
+        sv.invalidate();
     }
 
     private void style(GlassView r, AppRepo.AppItem a) {
         boolean hid = prefs.hidden().contains(a.pkg);
         r.lock = prefs.isLocked(a.pkg);
-        r.value = hid ? L.t("Скрыто") : L.t("Показано");
+        r.eye = hid ? 2 : 1;        // глаз: показано — 100%, скрыто — 50%
         r.invalidate();
     }
 

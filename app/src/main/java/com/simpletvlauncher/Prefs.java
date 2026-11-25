@@ -85,7 +85,7 @@ public class Prefs {
     /** На какой загрузке устройства автозапуск уже отработал (повторный старт лаунчера на той же загрузке его не повторяет). */
     public String autoBootDone() { return sp.getString("autoBootDone", ""); }
     public void setAutoBootDone(String v) { sp.edit().putString("autoBootDone", v).apply(); }
-    public int cols() { return Math.max(4, Math.min(10, sp.getInt("cols", 7))); }
+    public int cols() { return Math.max(4, Math.min(12, sp.getInt("cols", 7))); }
     public void setCols(int v) { sp.edit().putInt("cols", v).apply(); }
 
     // ---- сетка приложений ----
@@ -109,11 +109,18 @@ public class Prefs {
     public boolean glow() { return sp.getBoolean("glow", false); }
     public void setGlow(boolean v) { sp.edit().putBoolean("glow", v).apply(); }
 
-    /** Размер шрифта: 0 мелкий, 1 обычный (как раньше), 2 крупный, 3 очень крупный. */
-    public static final String[] FONT_NAMES = {"Мелкий", "Обычный", "Крупный", "Очень крупный"};
-    private static final float[] FONT_K = {0.88f, 1f, 1.12f, 1.25f};
-    public int fontSize() { return Math.max(0, Math.min(3, sp.getInt("font", 1))); }
+    /** Размер шрифта: 0 мелкий, 1 обычный (как раньше), 2 крупный. */
+    public static final String[] FONT_NAMES = {"Мелкий", "Обычный", "Крупный"};
+    private static final float[] FONT_K = {0.88f, 1f, 1.12f};
+    public int fontSize() { return Math.max(0, Math.min(2, sp.getInt("font", 1))); }
     public void setFontSize(int v) { sp.edit().putInt("font", v).apply(); UI.fs = FONT_K[v]; }
+
+    /** Размер названия приложения на главном экране: от «очень мелкого» (0) до «очень крупного» (4). Складывается с общим размером шрифта (умножается на него). */
+    public static final String[] TITLE_NAMES = {"Очень мелкий", "Меньше", "Стандарт", "Крупнее", "Очень крупный"};
+    private static final float[] TITLE_K = {0.72f, 0.86f, 1f, 1.15f, 1.3f};
+    public int titleSize() { return Math.max(0, Math.min(4, sp.getInt("titleSz", 2))); }
+    public void setTitleSize(int v) { sp.edit().putInt("titleSz", v).apply(); }
+    public float titleK() { return TITLE_K[titleSize()]; }
 
     /** Избранные приложения («Все приложения» показывает их первыми): пакеты в порядке пользователя. */
     public List<String> favs() { return split(sp.getString("favs", "")); }
