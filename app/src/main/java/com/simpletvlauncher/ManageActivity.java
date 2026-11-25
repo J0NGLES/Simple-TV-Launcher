@@ -80,6 +80,14 @@ public class ManageActivity extends Activity {
         svl.topMargin = Math.round(190 * s);
         root.addView(sv, svl);
         setContentView(root);
+
+        android.content.IntentFilter f = new android.content.IntentFilter();
+        f.addAction(Intent.ACTION_PACKAGE_ADDED);
+        f.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        f.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        f.addAction(Intent.ACTION_PACKAGE_CHANGED);      // приложение включили или отключили
+        f.addDataScheme("package");
+        registerReceiver(pkgChanged, f);
     }
 
     private int tgt;                // положение прокрутки, к которому идёт список (начало какой-нибудь строки)
@@ -158,10 +166,44 @@ public class ManageActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (L.version != langV) { recreate(); return; }      // язык сменили, пока экран был закрыт
-        Weather.IO.execute(() -> {
-            final List<AppRepo.AppItem> l = AppRepo.loadAll(this);
-            runOnUiThread(() -> { all = l; populate(); });
-        });
+        reload.run();
+    }
+
+    private boolean stale;          // список изменился, пока поверх был открыт диалог: перестроим, когда он закроется
+
+    private final Runnable reload = new Runnable() {
+        @Override public void run() {
+            Weather.IO.execute(() -> {
+                final List<AppRepo.AppItem> l = AppRepo.loadAll(ManageActivity.this);
+                runOnUiThread(() -> {
+                    if (isDestroyed()) return;
+                    all = l;
+                    // под открытым меню строки не подменяем: меню держит ссылку на свою строку
+                    if (col.getChildCount() > 0 && !hasWindowFocus()) stale = true; else populate();
+                });
+            });
+        }
+    };
+
+    /** Приложение установили, удалили или обновили, пока список открыт (например, по ADB). */
+    private final android.content.BroadcastReceiver pkgChanged = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context c, Intent i) {
+            // при обновлении система сначала сообщает об «удалении»: ждём сообщения об установке, чтобы строка не пропадала
+            if (Intent.ACTION_PACKAGE_REMOVED.equals(i.getAction()) && i.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
+            col.removeCallbacks(reload);
+            col.postDelayed(reload, 400);       // несколько сообщений подряд — одно обновление списка
+        }
+    };
+
+    @Override public void onWindowFocusChanged(boolean has) {
+        super.onWindowFocusChanged(has);
+        if (has && stale) { stale = false; col.post(() -> { if (!isDestroyed()) populate(); }); }
+    }
+
+    @Override protected void onDestroy() {
+        unregisterReceiver(pkgChanged);
+        col.removeCallbacks(reload);
+        super.onDestroy();
     }
 
     private void updateSub() {
