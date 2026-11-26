@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -654,7 +655,7 @@ public class MainActivity extends Activity {
         weatherPill.frosted = true;
         weatherPill.focusScale = 1f;        // виджет погоды при наведении не увеличивается — только обводка
         weatherPill.solidFocus = false;     // цветные значки погоды плохо видны на белом: фокус — кольцо
-        place(weatherPill, mx, topY, 660 * s, ph);
+        place(weatherPill, mx, topY, ph, ph);
         weatherPill.painter = this::paintWeatherPill;
         weatherPill.setOnClickListener(v -> {
             if (!prefs.hasLocation()) { if (!kidBlocked()) startActivity(new Intent(this, SettingsActivity.class).putExtra("weather", true)); }
@@ -1623,47 +1624,78 @@ public class MainActivity extends Activity {
         });
     }
 
+    private static final float WEATHER_TEMP_SIZE = 0.67f;
+    private static final float WEATHER_CONDITION_SIZE = 0.295f;
+    private static final float WEATHER_DETAIL_SIZE = 0.25f;
+    private static final float WEATHER_RIGHT_PADDING = 0.38f;
+    private final Rect weatherTextBounds = new Rect();
+
     private String weatherSub(Weather.Pt p) {
         String sb = wd.city == null ? "" : wd.city;
         if (p.feel != null) sb += (sb.isEmpty() ? "" : " · ") + L.t("ощущается как ") + Weather.temp(p.feel);
         return sb;
     }
 
-    /** При крупном шрифте виджет погоды растёт вправо (до капсулы с кнопками), чтобы текст помещался целиком. */
     private void fitWeather() {
         if (weatherPill == null || capsule == null) return;
-        float ph = 84 * s, topY = 46 * s, w = 660 * s;
-        if (UI.fs > 1f && prefs.hasLocation() && wd != null && wd.cur != null) {
-            Paint pp = new Paint();
-            Weather.Pt p = wd.cur;
-            pp.setTypeface(GlassView.MED);
-            pp.setTextSize(ph * 0.53f * UI.fs);
-            float need = ph * 1.1f + pp.measureText(Weather.temp(p.t)) + ph * 0.25f + ph * 0.35f;
-            pp.setTypeface(GlassView.REG);
-            pp.setTextSize(ph * 0.295f * UI.fs);
-            float a = pp.measureText(p.desc == null ? "" : p.desc);
-            pp.setTextSize(ph * 0.25f * UI.fs);
-            need += Math.max(a, pp.measureText(weatherSub(p)));
-            float right = (capsule.getVisibility() == View.VISIBLE ? slots.get(capsule).left : slots.get(clock).left) - 24 * s;
-            w = Math.min(Math.max(w, need), Math.max(w, right - mx));
-        }
-        RectF r = slots.get(weatherPill);
-        if (r != null && Math.abs(r.width() - w) < 1f) return;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) weatherPill.getLayoutParams();
-        lp.width = Math.round(w);
+        float height = lp.height;
+        Paint paint = weatherPill.tp;
+        float contentWidth;
+        if (!prefs.hasLocation()) {
+            contentWidth = height * 1.1f + Math.max(
+                    measureWeatherText(paint, L.t("Погода"), height * 0.37f, GlassView.MED),
+                    measureWeatherText(paint, L.t("Выберите город в настройках"), height * 0.26f, GlassView.REG));
+        } else if (wd == null || wd.cur == null) {
+            contentWidth = height * 0.5f + measureWeatherText(paint, L.t("Погода…"), height * 0.34f, GlassView.REG);
+        } else {
+            Weather.Pt point = wd.cur;
+            float temperature = measureWeatherText(paint, Weather.temp(point.t), height * WEATHER_TEMP_SIZE, GlassView.MED);
+            float condition = measureWeatherText(paint, point.desc == null ? "" : point.desc,
+                    height * WEATHER_CONDITION_SIZE, GlassView.REG);
+            float description = measureWeatherText(paint, weatherSub(point), height * WEATHER_DETAIL_SIZE, GlassView.REG);
+            contentWidth = height * 1.35f + temperature + Math.max(condition, description);
+        }
+        RectF next = slots.get(capsule.getVisibility() == View.VISIBLE ? capsule : clock);
+        float availableWidth = next.left - lp.leftMargin - 24 * s;
+        int limit = Math.max(1, (int) Math.min(660 * s * Math.max(1, UI.fs), availableWidth));
+        int width = Math.min(limit, (int) Math.ceil(contentWidth + height * WEATHER_RIGHT_PADDING));
+        if (lp.width == width) return;
+        lp.width = width;
         weatherPill.setLayoutParams(lp);
-        slots.put(weatherPill, new RectF(mx, topY, mx + w, topY + ph));
+        RectF slot = slots.get(weatherPill);
+        slot.right = slot.left + width;
         weatherPill.invalidate();
         if (weatherPill.isFocused()) moveHighlight(weatherPill);
+    }
+
+    private static float measureWeatherText(Paint paint, String text, float size, android.graphics.Typeface typeface) {
+        paint.setTypeface(typeface);
+        paint.setTextSize(size * UI.fs);
+        return paint.measureText(text);
     }
 
     /** Две строки текста одним блоком по центру высоты виджета: при любом размере шрифта блок не смещается вверх или вниз. */
     private void twoLines(Canvas c, GlassView v, float x, String a, float sa, int ca, String b, float sb, int cb, float mw) {
         float hh = v.getHeight(), f = UI.fs;
-        float ha = 0.72f * sa * hh * f, gap = 0.58f * (sa + sb) * hh * f;
-        float y1 = hh / 2f - (ha + gap) / 2f + ha;
-        v.text(c, a, x, y1, hh * sa, ca, 1, Paint.Align.LEFT, mw);
-        v.text(c, b, x, y1 + gap, hh * sb, cb, 1, Paint.Align.LEFT, mw);
+        float gap = 0.58f * (sa + sb) * hh * f;
+        v.tp.setTypeface(GlassView.REG);
+        float top = Float.POSITIVE_INFINITY, bottom = Float.NEGATIVE_INFINITY;
+        if (!a.isEmpty()) {
+            v.tp.setTextSize(hh * sa * f);
+            v.tp.getTextBounds(a, 0, a.length(), weatherTextBounds);
+            top = weatherTextBounds.top;
+            bottom = weatherTextBounds.bottom;
+        }
+        if (!b.isEmpty()) {
+            v.tp.setTextSize(hh * sb * f);
+            v.tp.getTextBounds(b, 0, b.length(), weatherTextBounds);
+            top = Math.min(top, gap + weatherTextBounds.top);
+            bottom = Math.max(bottom, gap + weatherTextBounds.bottom);
+        }
+        float baseline = top <= bottom ? (hh - top - bottom) / 2f : hh / 2f;
+        v.text(c, a, x, baseline, hh * sa, ca, 1, Paint.Align.LEFT, mw);
+        v.text(c, b, x, baseline + gap, hh * sb, cb, 1, Paint.Align.LEFT, mw);
     }
 
     private void paintWeatherPill(Canvas c, GlassView v) {
@@ -1680,11 +1712,17 @@ public class MainActivity extends Activity {
             return;
         }
         Weather.Pt p = wd.cur;
-        Icons.weather(c, p.icon, hh * 0.58f, hh / 2f, hh * 0.3f, v.tp);
+        Icons.weather(c, p.icon, hh * 0.58f, hh * 0.475f, hh * 0.37f, v.tp);
         String t = Weather.temp(p.t);
         float x = hh * 1.1f;
-        v.text(c, t, x, hh / 2f + 0.33f * hh * 0.53f * UI.fs, hh * 0.53f, main, 2, Paint.Align.LEFT, 0);
-        float x2 = x + v.tp.measureText(t) + hh * 0.25f, mw = w - x2 - hh * 0.35f;
-        twoLines(c, v, x2, p.desc == null ? "" : p.desc, 0.295f, dark ? main : 0xF2FFFFFF, weatherSub(p), 0.25f, sub, mw);
+        float temperatureSize = hh * WEATHER_TEMP_SIZE;
+        v.tp.setTypeface(GlassView.MED);
+        v.tp.setTextSize(temperatureSize * UI.fs);
+        v.tp.getTextBounds(t, 0, t.length(), weatherTextBounds);
+        v.text(c, t, x, hh / 2f - weatherTextBounds.exactCenterY(), temperatureSize, main, 2, Paint.Align.LEFT, 0);
+        float x2 = x + v.tp.measureText(t) + hh * 0.25f, mw = w - x2 - hh * WEATHER_RIGHT_PADDING;
+        if (mw <= 0) return;
+        twoLines(c, v, x2, p.desc == null ? "" : p.desc, WEATHER_CONDITION_SIZE,
+                dark ? main : 0xF2FFFFFF, weatherSub(p), WEATHER_DETAIL_SIZE, sub, mw);
     }
 }
