@@ -119,7 +119,19 @@ public class BgView extends View {
                 invalidateTree(getRootView());
             }
         };
+        if (main) prepareSoft();
         if (soft) Bg.requestSoft(getContext(), cb); else Bg.request(getContext(), cb);
+    }
+
+    /**
+     * Размытую картинку для остальных экранов готовим заранее, пока виден рабочий стол. Иначе при первом открытии
+     * погоды, настроек или списка приложений фон сначала тёмный, а картинка появляется позже — это выглядит как моргание.
+     */
+    private void prepareSoft() {
+        if (!new Prefs(getContext()).bgAll()) return;
+        Bg.requestSoft(getContext(), new Bg.Cb() {
+            @Override public void done(Bitmap b) {}         // нужна только копия в кэше
+        });
     }
 
     // ---- плавная смена картинки (автосмена обоев на рабочем столе) ----

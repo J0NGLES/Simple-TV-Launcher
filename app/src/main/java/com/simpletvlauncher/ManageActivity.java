@@ -23,7 +23,7 @@ import java.util.Set;
 public class ManageActivity extends Activity {
     private Prefs prefs;
     private float s;
-    private boolean manage, favMode;
+    private boolean manage, favMode, hideMode;
     private LinearLayout col;
     private Snap sv;
     private TextView sub;
@@ -35,6 +35,7 @@ public class ManageActivity extends Activity {
         s = UI.scale(this);
         manage = getIntent().getBooleanExtra("manage", false);
         favMode = getIntent().getBooleanExtra("fav", false);
+        hideMode = getIntent().getBooleanExtra("hide", false);
         int W = getResources().getDisplayMetrics().widthPixels, H = getResources().getDisplayMetrics().heightPixels;
 
         FrameLayout root = new FrameLayout(this);
@@ -211,6 +212,7 @@ public class ManageActivity extends Activity {
         Set<String> hs = prefs.hidden();
         for (AppRepo.AppItem a : all) if (hs.contains(a.pkg)) hidden++;
         if (favMode) sub.setText(L.t("OK — добавить в избранное или убрать · удержание — меню"));
+        else if (hideMode) sub.setText(L.t("OK — скрыть или показать на главном экране · удержание — меню"));
         else sub.setText(L.t("Всего: ") + all.size() + L.t(" · скрыто: ") + hidden + L.t(" · избранных: ") + prefs.favs().size());
     }
 
@@ -234,7 +236,7 @@ public class ManageActivity extends Activity {
             r.setTag(a.pkg);
             style(r, a);
             r.setOnClickListener(v -> {
-                if (favMode) toggleFav(a); else menu(r, a);     // OK: открыть, показать/скрыть, избранное, удалить, о приложении
+                if (favMode) toggleFav(a); else if (hideMode) toggle(r, a); else menu(r, a);     // OK: открыть, показать/скрыть, избранное, удалить, о приложении
             });
             r.setOnLongClickListener(v -> { menu(r, a); return true; });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, Math.round(88 * s));
@@ -288,6 +290,7 @@ public class ManageActivity extends Activity {
     private void style(GlassView r, AppRepo.AppItem a) {
         boolean hid = prefs.hidden().contains(a.pkg);
         r.lock = prefs.isLocked(a.pkg);
+        r.fav = prefs.favs().contains(a.pkg);
         r.eye = hid ? 2 : 1;        // глаз: показано — 100%, скрыто — 50%
         r.invalidate();
     }

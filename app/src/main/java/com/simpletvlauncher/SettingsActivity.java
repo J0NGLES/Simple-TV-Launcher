@@ -154,7 +154,8 @@ public class SettingsActivity extends Activity {
         row(L.t("Клиент для VPN"), () -> vpnLabel(), this::askVpn);
         row(L.t("Приложение для поиска"), () -> searchLabel(), this::askSearch);
         divider();
-        row(L.t("Избранные приложения"), () -> String.valueOf(prefs.favs().size()), () -> startActivity(new Intent(this, ManageActivity.class).putExtra("fav", true)));
+        row(L.t("Скрыть сразу несколько приложений с главного экрана"), () -> String.valueOf(prefs.hidden().size()), () -> startActivity(new Intent(this, ManageActivity.class).putExtra("hide", true)));
+        row(L.t("Добавить сразу несколько приложений в избранное (в меню «Все приложения»)"), () -> String.valueOf(prefs.favs().size()), () -> startActivity(new Intent(this, ManageActivity.class).putExtra("fav", true)));
         divider();
         row(L.t("Показать все скрытые приложения"), () -> prefs.hidden().size() + L.t(" скрыто"), this::askShowAll);
         row(L.t("Сбросить порядок плиток (по алфавиту)"), () -> "", this::askResetOrder);

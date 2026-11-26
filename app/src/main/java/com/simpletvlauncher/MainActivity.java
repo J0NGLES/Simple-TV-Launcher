@@ -229,7 +229,13 @@ public class MainActivity extends Activity {
         gap = 24 * s;
         geom();             // верх списка (vy) и отступ до нижних кнопок зависят от того, показаны ли название и подписи категорий
 
-        root = new FrameLayout(this);
+        // пока список приложений не прочитан, макет ещё не соответствует настройкам (виден лишний нижний ряд, фокус не там):
+        // рисуется только фон, весь интерфейс появляется разом, уже готовым
+        root = new FrameLayout(this) {
+            @Override protected boolean drawChild(android.graphics.Canvas c, View child, long time) {
+                return (ready || child == video || child == bg) && super.drawChild(c, child, time);
+            }
+        };
         video = new VideoBg(this);
         video.setVisibility(View.GONE);
         root.addView(video, new FrameLayout.LayoutParams(-1, -1));
@@ -286,8 +292,24 @@ public class MainActivity extends Activity {
 
         applyPrefs();
         loadApps();
+        h.postDelayed(reveal, 8000);        // страховка: если список прочитать не удалось, экран не останется пустым
         if (b == null) maybeAutostartApp();
     }
+
+    private boolean ready;          // интерфейс собран по настройкам и может быть показан
+
+    private final Runnable reveal = new Runnable() {
+        @Override public void run() {
+            if (ready) return;
+            ready = true;
+            root.invalidate();
+            View f = getCurrentFocus();
+            if (!(f instanceof GlassView)) return;
+            for (HighlightView hv : hls()) hv.hide();       // рамка сразу встаёт на место, а не «едет» от прежней кнопки
+            moveHighlight(f);
+            ensureVisible(f);
+        }
+    };
 
     /**
      * Запускает выбранное в настройках приложение, когда устройство только что включили. Срабатывает один раз за загрузку:
@@ -972,6 +994,7 @@ public class MainActivity extends Activity {
                     deletePkg = null;
                 }
                 applyApps();
+                if (!ready) h.postDelayed(reveal, 60);      // после того как плитки разложатся по местам
             });
         });
     }
@@ -1091,6 +1114,9 @@ public class MainActivity extends Activity {
     private Runnable longRun;
 
     @Override public boolean dispatchKeyEvent(KeyEvent e) {
+        int code = e.getKeyCode();      // пока экран пуст, стрелки и ОК ни на что не действуют
+        if (!ready && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_LEFT
+                || code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER)) return true;
         if (e.getAction() == KeyEvent.ACTION_DOWN) userMoved = true;
         trackUnlockKeys(e);
         // Свой разбор «короткое / долгое нажатие ОК» на плитках: не зависит от того, как пульт шлёт повтор клавиши

@@ -35,6 +35,7 @@ public class GlassView extends View {
     public int tint;                 // строка настроек: заливка другим цветом (0 — нет)
     public boolean warn;            // строка настроек: жёлтый «!» перед названием
     public int eye;                 // строка списка приложений: 1 — глаз (показано, 100%), 2 — тот же глаз вполсилы (скрыто)
+    public boolean fav;             // строка списка приложений: звёздочка слева от глаза (приложение в избранном)
     public boolean lock;            // строка списка приложений: замок (приложение под PIN-кодом)
     public boolean plain;           // без собственного стекла (кнопка внутри капсулы)
     public float focusScale = 1.08f;
@@ -218,6 +219,23 @@ public class GlassView extends View {
                 int ec = dk ? 0xFF55555F : 0xFFFFFFFF;
                 Icons.draw(c, Icons.EYE, w - pad - er * 1.4f, h / 2f, er, p, ColorUtil.alpha(ec, eye == 1 ? 255 : 26));
                 vw = er * 2.8f + pad;
+            }
+            if (fav) {          // звёздочка избранного — слева от глаза, высотой примерно с него
+                float r = h * 0.27f;
+                float cx2 = w - vw - pad * 0.55f - r, cy2 = h / 2f + r * 0.095f;      // поправка: нижние лучи короче верхнего
+                p.setStyle(Paint.Style.FILL);
+                p.setShader(null);
+                p.setColor(dk ? 0xFFB07A00 : 0xFFFFD25A);
+                android.graphics.Path star = new android.graphics.Path();
+                for (int k = 0; k < 10; k++) {
+                    double ang = -Math.PI / 2 + k * Math.PI / 5;
+                    float rr = k % 2 == 0 ? r : r * 0.45f;
+                    float px = cx2 + (float) Math.cos(ang) * rr, py = cy2 + (float) Math.sin(ang) * rr;
+                    if (k == 0) star.moveTo(px, py); else star.lineTo(px, py);
+                }
+                star.close();
+                c.drawPath(star, p);
+                vw += 2 * r + pad * 0.55f;
             }
             if (value != null) {
                 tp.setTypeface(REG);
