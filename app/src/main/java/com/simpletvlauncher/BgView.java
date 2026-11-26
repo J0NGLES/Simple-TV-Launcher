@@ -432,8 +432,8 @@ public class BgView extends View {
 
         GradientDrift(int w, int h) {
             int bw = Math.max(8, w / DOWN), bh = Math.max(8, h / DOWN);
-            upper = new DriftGlow(bakeGlow(bw, bh, upperGlow(bw, bh)), 52_000, 29_000, 0.065f, 0.04f, -0.04f, -0.025f);
-            lower = new DriftGlow(bakeGlow(bw, bh, lowerGlow(bw, bh)), 71_000, 43_000, -0.065f, -0.04f, 0.04f, 0.015f);
+            upper = new DriftGlow(bakeGlow(bw, bh, upperGlow(bw, bh)), 52_000, 0.065f, 0.04f, -0.04f, -0.025f);
+            lower = new DriftGlow(bakeGlow(bw, bh, lowerGlow(bw, bh)), 71_000, -0.065f, -0.04f, 0.04f, 0.015f);
             shade.setShader(gradientShade(h));
         }
 
@@ -471,31 +471,28 @@ public class BgView extends View {
         private static final PathInterpolator EASE = new PathInterpolator(0.42f, 0f, 0.58f, 1f);
         // Extend each texture by 7% on all sides so it covers the viewport throughout its path.
         private static final float OVERSCAN = 0.07f;
-        private final Bitmap bitmap;
         private static final int MIN_GLOW_ALPHA = 209;
-        private final long period, brightnessPeriod;
-        private final float firstX, firstY, secondX, secondY;
+        private final Bitmap bitmap;
+        private final long period;
+        private final float inwardX, inwardY, outwardX, outwardY;
 
-        DriftGlow(Bitmap bitmap, long period, long brightnessPeriod,
-                float firstX, float firstY, float secondX, float secondY) {
+        DriftGlow(Bitmap bitmap, long period, float inwardX, float inwardY, float outwardX, float outwardY) {
             this.bitmap = bitmap;
             this.period = period;
-            this.brightnessPeriod = brightnessPeriod;
-            this.firstX = firstX;
-            this.firstY = firstY;
-            this.secondX = secondX;
-            this.secondY = secondY;
+            this.inwardX = inwardX;
+            this.inwardY = inwardY;
+            this.outwardX = outwardX;
+            this.outwardY = outwardY;
         }
 
         void draw(Canvas c, Paint paint, RectF bounds, int w, int h, long time) {
             float progress = (time % period) / (float) period;
-            float x = offset(progress, firstX, secondX);
-            float y = offset(progress, firstY, secondY);
+            float x = offset(progress, inwardX, outwardX);
+            float y = offset(progress, inwardY, outwardY);
             bounds.set(w * (x - OVERSCAN), h * (y - OVERSCAN),
                     w * (1 + x + OVERSCAN), h * (1 + y + OVERSCAN));
-            float brightness = 1 - 2 * (time % brightnessPeriod) / (float) brightnessPeriod;
-            float easedBrightness = EASE.getInterpolation(Math.abs(brightness));
-            paint.setAlpha(MIN_GLOW_ALPHA + Math.round((255 - MIN_GLOW_ALPHA) * easedBrightness));
+            float inwardFraction = (x - outwardX) / (inwardX - outwardX);
+            paint.setAlpha(MIN_GLOW_ALPHA + Math.round((255 - MIN_GLOW_ALPHA) * inwardFraction));
             c.drawBitmap(bitmap, null, bounds, paint);
         }
 
