@@ -392,6 +392,7 @@ public class MainActivity extends Activity {
             if (!all.isEmpty()) applyApps();
         }
         applyBackground();
+        bg.setHomeResumed(true);
         bg.syncLook();
         h.removeCallbacks(tick);        // onPause останавливает часы, а onStart после короткой паузы не вызывается — запускаем их здесь
         h.post(tick);
@@ -473,6 +474,7 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         super.onPause();
         resumed = false;
+        bg.setHomeResumed(false);
         video.pause();
         h.removeCallbacks(netPoll);
         h.removeCallbacks(lateResume);
@@ -1171,11 +1173,13 @@ public class MainActivity extends Activity {
 
     /** Режим фона: 0 градиент, 1 картинка, 2 видео. Без файла — фиксированный градиент. */
     private void applyBackground() {
-        int mode = prefs.bgMode();
+        int selectedMode = prefs.bgMode();
+        int mode = selectedMode;
         if (mode == 1 && !Bg.has(this)) mode = 0;
         if (mode == 2 && !Bg.hasVideo(this)) mode = 0;
         bg.setMode(mode);
         bg.setAccent(prefs.themeColor());
+        bg.setGradientDrift(selectedMode == 0 && prefs.animateGradient());
         if (mode == 2) {
             video.setVisibility(View.VISIBLE);
             video.setSource(Bg.videoFile(this));

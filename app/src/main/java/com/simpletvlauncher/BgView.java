@@ -1,5 +1,6 @@
 package com.simpletvlauncher;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -8,8 +9,12 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Shader;
+import android.os.Build;
+import android.os.SystemClock;
 import android.view.View;
+import android.view.animation.PathInterpolator;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,10 +24,11 @@ import java.util.Map;
  * На остальных экранах (погода, приложения, настройки) — тот же фон, но размытый и неподвижный (если не выключено
  * в настройках): для видео берётся один кадр. Иначе — простой сплошной Material-фон.
  *
- * Градиент заранее рисуется в маленькую картинку (1/6 размера экрана) и дальше выводится как обычная текстура.
+ * Градиент рисуется в текстуру (1/6 размера экрана); при включённой анимации два блика движутся независимо.
  */
 public class BgView extends View {
     private static final int DOWN = 6;
+    private static final int GRADIENT_BASE = 0xFF07050B;
 
     private int accent;
     private final boolean main;
@@ -37,6 +43,8 @@ public class BgView extends View {
     private Bitmap cur;
     private Bitmap blurredBmp;
     private VideoBg live;
+    private boolean animateGradient, homeResumed;
+    private GradientDrift drift;
 
     /** Готовые градиенты по цвету — не пересчитываем при каждом возврате на экран. */
     private static final Map<Long, Bitmap> CACHE = new LinkedHashMap<Long, Bitmap>(16, 0.75f, true) {
@@ -287,7 +295,49 @@ public class BgView extends View {
         if (c == accent && cur != null) return;
         accent = c;
         build();
+        rebuildDrift();
         invalidate();
+    }
+
+    void setGradientDrift(boolean enabled) {
+        if (animateGradient == enabled) return;
+        animateGradient = enabled;
+        rebuildDrift();
+        invalidate();
+    }
+
+    void setHomeResumed(boolean resumed) {
+        homeResumed = resumed;
+        syncDrift();
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        syncDrift();
+    }
+
+    @Override protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        syncDrift();
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        if (drift != null) drift.setRunning(false);
+        super.onDetachedFromWindow();
+    }
+
+    private void rebuildDrift() {
+        if (drift != null) drift.setRunning(false);
+        int w = getWidth(), h = getHeight();
+        drift = animateGradient && mode == 0 && w > 0 && h > 0 ? new GradientDrift(w, h) : null;
+        syncDrift();
+    }
+
+    private void syncDrift() {
+        if (drift == null) return;
+        boolean systemAnimations = Build.VERSION.SDK_INT < 26 || ValueAnimator.areAnimatorsEnabled();
+        drift.setRunning(homeResumed && isAttachedToWindow() && hasWindowFocus()
+                && getWindowVisibility() == VISIBLE && systemAnimations);
     }
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
@@ -295,6 +345,7 @@ public class BgView extends View {
         if (main) Frost.light = new Prefs(getContext()).glass() == 0;
         blurredBmp = null;
         build();
+        rebuildDrift();
         prepareStill();
     }
 
@@ -343,22 +394,121 @@ public class BgView extends View {
         Bitmap b = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
         Paint q = new Paint(Paint.DITHER_FLAG);
-        c.drawColor(solid ? 0xFF0A0F1C : 0xFF07050B);
-        Shader a = new RadialGradient(bw * 0.30f, bh * 0.30f, bw * 0.78f,
-                new int[]{ColorUtil.alpha(accent, 0xA0), ColorUtil.alpha(accent, 0x38), 0},
-                new float[]{0f, 0.55f, 1f}, Shader.TileMode.CLAMP);
-        Shader d = new RadialGradient(bw * 0.92f, bh * 1.02f, bw * 0.6f,
-                new int[]{ColorUtil.alpha(ColorUtil.darker(accent, 0.8f), 0x78), 0},
-                new float[]{0f, 1f}, Shader.TileMode.CLAMP);
+        c.drawColor(solid ? 0xFF0A0F1C : GRADIENT_BASE);
         q.setAlpha(solid ? 150 : 255);
-        q.setShader(a); c.drawRect(0, 0, bw, bh, q);
-        q.setShader(d); c.drawRect(0, 0, bw, bh, q);
+        q.setShader(upperGlow(bw, bh)); c.drawRect(0, 0, bw, bh, q);
+        q.setShader(lowerGlow(bw, bh)); c.drawRect(0, 0, bw, bh, q);
         if (!solid) {
             q.setAlpha(255);
-            q.setShader(new LinearGradient(0, bh * 0.45f, 0, bh, 0, 0x88000000, Shader.TileMode.CLAMP));
+            q.setShader(gradientShade(bh));
             c.drawRect(0, 0, bw, bh, q);
         }
         return b;
+    }
+
+    private Shader upperGlow(int w, int h) {
+        return new RadialGradient(w * 0.30f, h * 0.30f, w * 0.78f,
+                new int[]{ColorUtil.alpha(accent, 0xA0), ColorUtil.alpha(accent, 0x38), 0},
+                new float[]{0f, 0.55f, 1f}, Shader.TileMode.CLAMP);
+    }
+
+    private Shader lowerGlow(int w, int h) {
+        return new RadialGradient(w * 0.92f, h * 1.02f, w * 0.6f,
+                new int[]{ColorUtil.alpha(ColorUtil.darker(accent, 0.8f), 0x78), 0},
+                new float[]{0f, 1f}, Shader.TileMode.CLAMP);
+    }
+
+    private static Shader gradientShade(int h) {
+        return new LinearGradient(0, h * 0.45f, 0, h, 0, 0x88000000, Shader.TileMode.CLAMP);
+    }
+
+    private static Bitmap bakeGlow(int w, int h, Shader shader) {
+        Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Paint paint = new Paint(Paint.DITHER_FLAG);
+        paint.setShader(shader);
+        new Canvas(bitmap).drawRect(0, 0, w, h, paint);
+        return bitmap;
+    }
+
+    private final class GradientDrift implements Runnable {
+        // These slow glows only need about 30 redraws per second.
+        private static final long FRAME_DELAY_MS = 32;
+        private final DriftGlow upper, lower;
+        private final Paint shade = new Paint(Paint.DITHER_FLAG);
+        private final RectF bounds = new RectF();
+        private long startedAt = -1, elapsed;
+
+        GradientDrift(int w, int h) {
+            int bw = Math.max(8, w / DOWN), bh = Math.max(8, h / DOWN);
+            upper = new DriftGlow(bakeGlow(bw, bh, upperGlow(bw, bh)), 52_000, 0.065f, 0.04f, -0.04f, -0.025f);
+            lower = new DriftGlow(bakeGlow(bw, bh, lowerGlow(bw, bh)), 71_000, -0.065f, -0.04f, 0.04f, 0.015f);
+            shade.setShader(gradientShade(h));
+        }
+
+        void setRunning(boolean running) {
+            if (running == (startedAt >= 0)) return;
+            long now = SystemClock.uptimeMillis();
+            if (running) {
+                startedAt = now;
+                invalidate();
+            } else {
+                elapsed += now - startedAt;
+                startedAt = -1;
+                removeCallbacks(this);
+            }
+        }
+
+        boolean hasStarted() { return startedAt >= 0 || elapsed > 0; }
+
+        @Override public void run() { invalidate(); }
+
+        void draw(Canvas c, int w, int h) {
+            long time = elapsed + (startedAt >= 0 ? SystemClock.uptimeMillis() - startedAt : 0);
+            c.drawColor(GRADIENT_BASE);
+            upper.draw(c, p, bounds, w, h, time);
+            lower.draw(c, p, bounds, w, h, time);
+            c.drawRect(0, h * 0.45f, w, h, shade);
+            if (startedAt >= 0 && !Backdrop.capturing) {
+                removeCallbacks(this);
+                postOnAnimationDelayed(this, FRAME_DELAY_MS);
+            }
+        }
+    }
+
+    private static final class DriftGlow {
+        private static final PathInterpolator EASE = new PathInterpolator(0.42f, 0f, 0.58f, 1f);
+        // Extend each texture by 7% on all sides so it covers the viewport throughout its path.
+        private static final float OVERSCAN = 0.07f;
+        private static final int MIN_GLOW_ALPHA = 209;
+        private final Bitmap bitmap;
+        private final long period;
+        private final float inwardX, inwardY, outwardX, outwardY;
+
+        DriftGlow(Bitmap bitmap, long period, float inwardX, float inwardY, float outwardX, float outwardY) {
+            this.bitmap = bitmap;
+            this.period = period;
+            this.inwardX = inwardX;
+            this.inwardY = inwardY;
+            this.outwardX = outwardX;
+            this.outwardY = outwardY;
+        }
+
+        void draw(Canvas c, Paint paint, RectF bounds, int w, int h, long time) {
+            float progress = (time % period) / (float) period;
+            float x = offset(progress, inwardX, outwardX);
+            float y = offset(progress, inwardY, outwardY);
+            bounds.set(w * (x - OVERSCAN), h * (y - OVERSCAN),
+                    w * (1 + x + OVERSCAN), h * (1 + y + OVERSCAN));
+            float inwardFraction = (x - outwardX) / (inwardX - outwardX);
+            paint.setAlpha(MIN_GLOW_ALPHA + Math.round((255 - MIN_GLOW_ALPHA) * inwardFraction));
+            c.drawBitmap(bitmap, null, bounds, paint);
+        }
+
+        private static float offset(float progress, float first, float second) {
+            if (progress < 0.35f) return first * EASE.getInterpolation(progress / 0.35f);
+            if (progress < 0.72f) return first + (second - first) * EASE.getInterpolation((progress - 0.35f) / 0.37f);
+            return second * (1 - EASE.getInterpolation((progress - 0.72f) / 0.28f));
+        }
     }
 
     private final Paint dimPaint = new Paint();
@@ -407,7 +557,11 @@ public class BgView extends View {
             }
             return;
         }
-        if (cur == null) { c.drawColor(solid ? 0xFF0A0F1C : 0xFF07050B); return; }
+        if (drift != null && drift.hasStarted()) {
+            drift.draw(c, w, h);
+            return;
+        }
+        if (cur == null) { c.drawColor(solid ? 0xFF0A0F1C : GRADIENT_BASE); return; }
         dst.set(0, 0, w, h);
         p.setAlpha(255);
         c.drawBitmap(cur, null, dst, p);

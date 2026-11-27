@@ -213,6 +213,7 @@ public class SettingsActivity extends Activity {
         modeRow = row(L.t("Тип заднего фона"), () -> L.t(Prefs.BG_MODES[prefs.bgMode()]), this::askMode);
         if (mode == 0) {
             row(L.t("Цвет градиента"), () -> L.t(Prefs.THEME_NAMES[prefs.theme()]), this::askColor);
+            toggle(L.t("Анимация градиента"), prefs::animateGradient, prefs::setAnimateGradient);
         } else if (mode == 1) {
             row(L.t("Выбрать изображение"), () -> Bg.has(this) ? L.t("задано") : L.t("не задано"), this::askImageSource);
             wpRow = row(L.t("Автосмена обоев"), this::wpLabel, this::askWpSource);

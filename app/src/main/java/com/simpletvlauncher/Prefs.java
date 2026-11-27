@@ -61,6 +61,8 @@ public class Prefs {
         return old == 2 ? 1 : old == 3 ? 2 : 0;
     }
     public void setBgMode(int v) { sp.edit().putInt("bgMode2", v).apply(); }
+    public boolean animateGradient() { return sp.getBoolean("animateGradient", false); }
+    public void setAnimateGradient(boolean v) { sp.edit().putBoolean("animateGradient", v).apply(); }
     /** Тот же фон (размытый) на экранах погоды, приложений и настроек. */
     public boolean bgAll() { return true; }      // тот же фон, размытый, на остальных экранах — всегда
     /** Кнопка «Домой» ведёт в этот лаунчер (через службу спецвозможностей; по умолчанию да). */
