@@ -77,6 +77,7 @@ public class BgPickerActivity extends Activity {
         svl.topMargin = Math.round(182 * s);
         root.addView(sv, svl);
         setContentView(root);
+        LiquidGlass.watch(getWindow());
 
         String perm = Build.VERSION.SDK_INT >= 33 ? (video ? Manifest.permission.READ_MEDIA_VIDEO : Manifest.permission.READ_MEDIA_IMAGES) : Manifest.permission.READ_EXTERNAL_STORAGE;
         if (checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED) start();

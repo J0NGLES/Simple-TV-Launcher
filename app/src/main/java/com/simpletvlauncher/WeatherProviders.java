@@ -91,10 +91,6 @@ final class WeatherProviders {
         return new JSONObject().put("data", a).toString();
     }
 
-    private static Double d(JSONArray a, int i) {
-        return a == null || i >= a.length() || a.isNull(i) ? null : a.optDouble(i);
-    }
-
     private static final double HPA_TO_MM = 0.750062;
 
     /** Среднее значение за интервал [from, to) по почасовым данным; null, если данных нет. */

@@ -34,11 +34,6 @@ public final class Bg {
     /** Меняется, когда пользователь выбрал другую картинку или видео. */
     public static String sig(Context c) { return file(c).lastModified() + ":" + videoFile(c).lastModified(); }
 
-    public static void clear(Context c) {
-        file(c).delete();
-        CACHE.clear();
-    }
-
     /** Вернёт (в основном потоке) фоновую картинку с заданным пользователем размытием или null, если фон не задан. */
     public static void request(Context ctx, Cb cb) {
         request(ctx, cb, new Prefs(ctx.getApplicationContext()).bgBlur());
@@ -182,7 +177,7 @@ public final class Bg {
     }
 
     /** Картинка становится обоем: уменьшается до 1920 и записывается в bg.jpg (через временный файл, чтобы не отдать недописанный). */
-    private static boolean applyUri(Context c, Uri u) {
+    static boolean applyUri(Context c, Uri u) {
         File tmp = new File(c.getFilesDir(), "bg.jpg.tmp"), dst = file(c);
         if (!saveImage(c, u, tmp)) { tmp.delete(); return false; }
         dst.delete();
@@ -198,6 +193,7 @@ public final class Bg {
      */
     public static synchronized boolean wpNext(Context ctx, Prefs pr) {
         Context c = ctx.getApplicationContext();
+        if (pr.wpOnline() >= 0) return Wallhaven.rotate(c, pr);
         String bucket = pr.wpBucket();
         if (bucket.isEmpty()) return false;
         pr.setWpLast(System.currentTimeMillis());          // отсчёт заново в любом случае, чтобы при сбое не повторять попытку без конца

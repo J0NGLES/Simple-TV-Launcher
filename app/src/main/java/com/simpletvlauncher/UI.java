@@ -36,6 +36,12 @@ public final class UI {
     /** Множитель размера шрифта из настроек (1 — как было). */
     public static float fs = 1f;
 
+    /** Настройка «Контрастные надписи»: чёрная обводка и тень у текста на всех экранах. Значение держит в актуальном виде Prefs. */
+    static boolean contrast;
+
+    /** Настройка «Анимации в стиле tvOS». Значение держит в актуальном виде Prefs. */
+    static boolean tvos;
+
     /** Текст с учётом выбранного размера шрифта. */
     public static TextView text(Context c, String t, float px, int color, Typeface tf) {
         return text(c, t, px, color, tf, true);
@@ -43,7 +49,10 @@ public final class UI {
 
     /** scale = false — размер не зависит от настройки (часы). */
     public static TextView text(Context c, String t, float px, int color, Typeface tf, boolean scale) {
-        TextView v = new TextView(c);
+        return style(new OutlineText(c), t, px, color, tf, scale);
+    }
+
+    static <T extends TextView> T style(T v, String t, float px, int color, Typeface tf, boolean scale) {
         v.setText(t);
         v.setTextSize(TypedValue.COMPLEX_UNIT_PX, scale ? px * fs : px);
         v.setTextColor(color);

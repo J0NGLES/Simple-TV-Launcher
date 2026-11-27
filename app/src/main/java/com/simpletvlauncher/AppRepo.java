@@ -24,6 +24,7 @@ public final class AppRepo {
         public String pkg, cls, label;
         public Drawable icon, banner;
         public int color;          // кэш доминантного цвета (0 = ещё не считали)
+        android.graphics.Bitmap square;      // готовая картинка квадратной плитки
         public ComponentName component() { return new ComponentName(pkg, cls); }
     }
 
@@ -33,6 +34,10 @@ public final class AppRepo {
     private static boolean isSettings(String pkg) {
         return pkg.equals("com.android.settings") || pkg.equals("com.android.tv.settings")
                 || pkg.equals("com.google.android.tvsettings") || pkg.equals("com.android.settings.intelligence");
+    }
+
+    private static boolean isWide(Drawable d) {
+        return d != null && d.getIntrinsicHeight() > 0 && d.getIntrinsicWidth() > d.getIntrinsicHeight() * 1.3f;
     }
 
     /** Все приложения, которые можно запустить, по алфавиту. Вызывать в фоне. */
@@ -52,6 +57,12 @@ public final class AppRepo {
                 CharSequence l = ri.loadLabel(pm);
                 a.label = l == null ? pkg : l.toString();
                 try { a.icon = ri.loadIcon(pm); } catch (Throwable ignored) {}
+                if (isWide(a.icon)) {          // вместо значка подставлен баннер — пробуем значок самого приложения
+                    try {
+                        Drawable own = ri.activityInfo.applicationInfo.loadIcon(pm);
+                        if (!isWide(own)) a.icon = own;
+                    } catch (Throwable ignored) {}
+                }
                 try { a.banner = ri.activityInfo.loadBanner(pm); } catch (Throwable ignored) {}
                 map.put(pkg, a);
             }

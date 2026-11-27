@@ -7,9 +7,6 @@ import android.os.Looper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.URLEncoder;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -31,7 +28,7 @@ public final class Weather {
     public static class Pt {
         public long unix;
         public int off;                 // смещение часового пояса, минуты
-        public Double t, tMin, tMax, feel, wind, gust, windDeg, hum, press, prec, cloud;
+        public Double t, tMin, tMax, feel, wind, windDeg, hum, press, prec;
         public String icon, desc, sunrise, sunset;
     }
 
@@ -74,15 +71,6 @@ public final class Weather {
                 }
             }
         });
-    }
-
-    private static String read(InputStream in) throws Exception {
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = br.readLine()) != null) sb.append(line);
-        br.close();
-        return sb.toString();
     }
 
     // ---------- разбор кэша ----------
@@ -130,12 +118,10 @@ public final class Weather {
         p.feel = num(o, "temperature", "comfort", "C");
         if (p.feel == null) p.feel = num(o, "temperature", "comfort", "max", "C");
         p.wind = first(num(o, "wind", "speed", "m_s"), num(o, "wind", "speed", "max", "m_s"), num(o, "wind", "speed", "avg", "m_s"));
-        p.gust = first(num(o, "wind", "gust_speed", "m_s"), num(o, "wind", "gust_speed", "max", "m_s"));
         p.windDeg = num(o, "wind", "direction", "degree");
         p.hum = first(num(o, "humidity", "percent"), num(o, "humidity", "percent", "avg"));
         p.press = first(num(o, "pressure", "mm_hg_atm"), num(o, "pressure", "mm_hg_atm", "max"));
         p.prec = num(o, "precipitation", "amount");
-        p.cloud = num(o, "cloudiness", "percent");
         JSONObject sun = sub(sub(o, "astronomy"), "sun");
         if (sun != null) {
             p.sunrise = hhmm(sun.optString("sunrise", ""));

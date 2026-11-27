@@ -39,7 +39,7 @@ public final class Backup {
     public static class Item {
         public Uri uri;
         public String name;
-        public long size, time;
+        public long time;
         public String bg = "", grid = "", pos = "", glow = "";
         public boolean ok = true;          // false: файл есть, но восстановить из него нельзя
         public String problem = "";
@@ -72,14 +72,13 @@ public final class Backup {
         java.util.Set<String> seen = new HashSet<>();
         if (Build.VERSION.SDK_INT >= 29) {
             try (Cursor q = c.getContentResolver().query(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                    new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_ADDED},
+                    new String[]{MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DATE_ADDED},
                     MediaStore.MediaColumns.DISPLAY_NAME + " LIKE ?", new String[]{PREFIX + "%"}, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
                 while (q != null && q.moveToNext()) {
                     Item it = new Item();
                     it.uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, q.getLong(0));
                     it.name = q.getString(1);
-                    it.size = q.getLong(2);
-                    it.time = timeOf(it.name, q.getLong(3) * 1000L);
+                    it.time = timeOf(it.name, q.getLong(2) * 1000L);
                     if (seen.add(it.name)) res.add(it);
                 }
             } catch (Throwable ignored) {}
@@ -91,7 +90,6 @@ public final class Backup {
                 Item it = new Item();
                 it.uri = Uri.fromFile(f);
                 it.name = f.getName();
-                it.size = f.length();
                 it.time = timeOf(it.name, f.lastModified());
                 res.add(it);
             }
@@ -152,18 +150,29 @@ public final class Backup {
             if (mode == 2 && !mp4) bg += L.t(" (файла нет)");
             int cols = root.has("cols") ? root.getJSONObject("cols").optInt("v", 7) : 7;
             cols = Math.max(4, Math.min(12, cols));
-            if (mode == 1) bg += " \u00b7 " + L.t("размытие: ") + Math.max(0, Math.min(100, intOf(root, "bgBlur", 0))) + " %";
+            if (mode == 1) {
+                bg += " \u00b7 " + L.t("размытие: ") + Math.max(0, Math.min(100, intOf(root, "bgBlur", 0))) + " %";
+                // автосмена: выбрана папка или тема из интернета (работает только с фоном-картинкой)
+                int online = intOf(root, "wpOnline", -1);
+                boolean auto = (online >= 0 && online < Wallhaven.THEMES.length)
+                        || (root.has("wpBucket") && root.getJSONObject("wpBucket").optString("v", "").length() > 0);
+                bg += " \u00b7 " + L.t("автосмена: ") + L.t(auto ? "вкл" : "выкл");
+            }
             it.bg = L.t("Фон: ") + bg;
-            int tile = Math.max(0, Math.min(5, intOf(root, "tileSize", 0)));
+            int tile = root.has("tileSize2") ? intOf(root, "tileSize2", 0) : Prefs.tileSizeFromOld(intOf(root, "tileSize", 0));
+            tile = Math.max(0, Math.min(Prefs.TILE_NAMES.length - 1, tile));
             int pin = Math.max(0, Math.min(2, intOf(root, "gridPin", 0)));
             int al = intOf(root, "gridAlign", 0) == 1 ? 1 : 0;
             boolean gl = root.has("glow") && root.getJSONObject("glow").optBoolean("v", false);
             boolean showTitle = !root.has("showTitle") || root.getJSONObject("showTitle").optBoolean("v", true);
             int font = Math.max(0, Math.min(2, intOf(root, "font", 1)));
             java.util.Locale lc = L.locale();
-            it.grid = L.t("Сетка: ") + cols + L.t(" в ряду") + " \u00b7 " + L.t("плитки: ") + L.t(Prefs.TILE_NAMES[tile]).toLowerCase(lc) + " \u00b7 " + L.t("названия: ") + L.t(showTitle ? "вкл" : "выкл");
+            String shape = L.t(intOf(root, "tileShape", 0) == 1 ? "Квадрат" : "Баннер").toLowerCase(lc);
+            it.grid = L.t("Сетка: ") + cols + L.t(" в ряду") + " \u00b7 " + L.t("плитки: ") + shape + " \u00b7 " + L.t("размер: ") + L.t(Prefs.TILE_NAMES[tile]).toLowerCase(lc) + " \u00b7 " + L.t("названия: ") + L.t(showTitle ? "вкл" : "выкл");
             it.pos = L.t("Положение: ") + L.t(Prefs.PIN_NAMES[pin]).toLowerCase(lc) + " \u00b7 " + L.t("центровка: ") + L.t(Prefs.ALIGN_NAMES[al]).toLowerCase(lc);
-            it.glow = L.t("Свечение: ") + L.t(gl ? "включено" : "выключено") + " \u00b7 " + L.t("шрифт: ") + L.t(Prefs.FONT_NAMES[font]).toLowerCase(lc);
+            it.glow = L.t("Свечение: ") + L.t(gl ? "включено" : "выключено") + " \u00b7 " + L.t("шрифт: ") + L.t(Prefs.FONT_NAMES[font]).toLowerCase(lc)
+                    // подложка включена, пока в копии не стоит «Скрыть подложку приложений»
+                    + " \u00b7 " + L.t("подложка: ") + L.t(root.has("noPanel") && root.getJSONObject("noPanel").optBoolean("v", false) ? "выкл" : "вкл");
         } catch (Throwable t) {
             it.ok = false;
             it.problem = L.t("Файл повреждён или создан другой версией, прочитать его не удалось");

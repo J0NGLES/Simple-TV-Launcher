@@ -5,6 +5,9 @@ import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Xfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -26,7 +29,7 @@ public class GlassView extends View {
 
     public float radius = 20;
     public int icon;                 // Icons.*
-    public String label, value, hint, title;
+    public String label, value, title;
     public Drawable appIcon;         // для строк списка
     public boolean left;             // строка списка: текст слева, значение справа
     public boolean floating;         // фокус рисует плавающая подсветка, не сама плитка
@@ -48,10 +51,8 @@ public class GlassView extends View {
     private final RectF rf = new RectF();
 
     // Material-стиль (все экраны, кроме главного): сплошные поверхности, обводка при фокусе
-    public static final int MAT_SURFACE = 0xFF2B2930, MAT_FOCUS = 0xFF4A4458, MAT_PRIMARY = 0xFFD0BCFF;
     public boolean solidFocus;       // главный экран: в фокусе — сплошная белая таблетка с тёмным содержимым
     public boolean material;
-    public int surface = MAT_SURFACE;
     public int swatch;               // цветной кружок слева (выбор цвета)
 
     public GlassView(Context c) {
@@ -68,7 +69,10 @@ public class GlassView extends View {
     }
 
     /** Строка без собственного рисунка в Material-режиме: фокус = сплошная светлая таблетка с тёмным текстом. */
-    private boolean pill() { return material && painter == null && !plain; }
+    private boolean pill() { return material && painter == null && !plain && !UI.tvos; }
+
+    /** Сплошная белая таблетка в фокусе; с анимациями tvOS вместо неё стекло. */
+    boolean solid() { return solidFocus && !UI.tvos; }
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
         super.onSizeChanged(w, h, ow, oh);
@@ -96,8 +100,31 @@ public class GlassView extends View {
         return (size + 2 * ex) / (float) size;
     }
 
+    private static final float GROW = 14f;     // с анимациями широкий элемент растёт не больше чем на столько с каждой стороны
+    private boolean springing;
+
+    /** Увеличение выбранного элемента с анимациями tvOS; под этот размер подгоняется и стекло. */
+    float liquidScale() {
+        int side = Math.max(getWidth(), getHeight());
+        if (focusScale <= 1f || side <= 0) return 1f;
+        float want = floating ? Math.max(focusScale, LiquidGlass.SCALE) : focusScale;
+        return Math.min(want, 1f + 2 * GROW * UI.scale(getContext()) / side);
+    }
+
     public void applyFocusScale() {
-        float t = isFocused() && !material ? focusScale : 1f;
+        boolean on = isFocused();
+        if (springing) { animate().cancel(); springing = false; }
+        if (UI.tvos) {
+            float t = on ? liquidScale() : 1f, sx = snap(getWidth(), t), sy = snap(getHeight(), t);
+            if (getScaleX() == sx && getScaleY() == sy) return;
+            // выбранный элемент «перелетает» свой размер и возвращается, отпущенный уменьшается плавно
+            springing = true;
+            animate().scaleX(sx).scaleY(sy).setDuration(on ? LiquidGlass.TILE_IN : LiquidGlass.TILE_OUT)
+                    .setInterpolator(new android.view.animation.OvershootInterpolator(on ? LiquidGlass.OVERSHOOT : 0f))
+                    .withLayer().start();
+            return;
+        }
+        float t = on && !material ? focusScale : 1f;
         setScaleX(snap(getWidth(), t));
         setScaleY(snap(getHeight(), t));
     }
@@ -122,7 +149,7 @@ public class GlassView extends View {
             c.drawRect(0, 0, w, h, p);
             return;
         }
-        if (solidFocus && isFocused()) return;      // белую таблетку рисует HighlightView под плиткой
+        if (solid() && isFocused()) return;      // белую таблетку рисует HighlightView под плиткой
         if (frosted) {
             Frost.draw(this, c, w, h, radius);
             if (!floating && isFocused()) { p.setStyle(Paint.Style.FILL); p.setShader(null); p.setColor(0x38FFFFFF); c.drawRect(0, 0, w, h, p); }
@@ -143,6 +170,7 @@ public class GlassView extends View {
     protected void drawChrome(Canvas c) {
         int w = getWidth(), h = getHeight();
         if (material) {
+            if (UI.tvos && isFocused()) return;      // кромку даёт стекло
             if (!pill() || !isFocused()) {
                 boolean f = isFocused();
                 float sw = f ? Math.max(3f, h / 28f) : Math.max(1.5f, h / 56f);
@@ -156,8 +184,8 @@ public class GlassView extends View {
             return;
         }
         p.setShader(null);
-        if (solidFocus && isFocused()) return;
-        if (floating && isFocused()) {
+        if (solid() && isFocused()) return;
+        if (floating && isFocused() && !UI.tvos) {
             // блик: диагональный «зеркальный» отсвет по верхней части плитки
             p.setStyle(Paint.Style.FILL);
             // сильнее «стекло» у выбранной плитки: диагональный блик, светлая верхняя кромка и лёгкое затемнение снизу
@@ -169,8 +197,9 @@ public class GlassView extends View {
             c.drawRect(0, h * 0.6f, w, h, p);
             p.setShader(null);
         }
+        boolean f = !floating && !UI.tvos && isFocused();
+        if (frosted && !f) return;                  // кромку стекла рисует Frost
         p.setStyle(Paint.Style.STROKE);
-        boolean f = !floating && isFocused();
         float sw = Math.max(1.2f, h / 100f) * (f ? 1.8f : 1f);
         p.setStrokeWidth(sw);
         p.setColor(f ? 0xDDFFFFFF : 0x26FFFFFF);
@@ -194,7 +223,7 @@ public class GlassView extends View {
     protected void drawContent(Canvas c) {
         if (painter != null) { painter.paint(c, this); return; }
         int w = getWidth(), h = getHeight();
-        boolean dk = isFocused() && (material ? pill() : (solidFocus || plain));
+        boolean dk = isFocused() && (material ? pill() : !UI.tvos && (solidFocus || plain));
         int ic = dk ? ColorUtil.alpha(0xFF1B1B22, android.graphics.Color.alpha(iconColor) >= 0xF0 ? 255 : 120) : iconColor;
         if (left) {
             float pad = h * 0.3f, x = pad;
@@ -286,6 +315,48 @@ public class GlassView extends View {
             while (n > 1 && tp.measureText(s, 0, n) + tp.measureText("…") > maxW) n--;
             s = s.substring(0, n) + "…";
         }
+        if (UI.contrast && light(color)) contrast(c, s, x, y, al);
         c.drawText(s, x, y, tp);
+    }
+
+    /** Обводка и тень нужны только светлым буквам: тёмному тексту на белой таблетке чёрная кайма лишь мешает. */
+    private static boolean light(int color) {
+        return (color >>> 24) != 0 && (3 * ((color >> 16) & 255) + 6 * ((color >> 8) & 255) + (color & 255)) > 1280;
+    }
+
+    private static final Xfermode CUT = new PorterDuffXfermode(PorterDuff.Mode.DST_OUT);
+
+    /**
+     * То же, что у OutlineText, но для текста на Canvas: непрозрачная тень и обводка 25 %. Слой нужен только полупрозрачному
+     * тексту (чтобы чёрный не просвечивал сквозь буквы) и берётся по размеру самой строки — на слабых ТВ это важно.
+     */
+    private void contrast(Canvas c, String s, float x, float y, Paint.Align al) {
+        int color = tp.getColor();
+        float u = UI.scale(getContext()), size = tp.getTextSize();
+        float px = Math.max(1, Math.round(u));
+        boolean small = size < 24 * u, clear = (color >>> 24) < 255;
+        float shift = small ? px : 2 * px, stroke = small ? 1.5f * px : 2 * px;
+        int layer = 0;
+        if (clear) {
+            float tw = tp.measureText(s), l = al == Paint.Align.LEFT ? x : al == Paint.Align.CENTER ? x - tw / 2f : x - tw;
+            layer = c.saveLayer(l - size * 0.2f, y - size * 1.2f, l + tw + size * 0.2f + shift, y + size * 0.45f + shift, null);
+        }
+        tp.setColor(0xFF000000);
+        c.drawText(s, x + shift, y + shift, tp);
+        tp.setStyle(Paint.Style.STROKE);
+        tp.setStrokeJoin(Paint.Join.ROUND);
+        tp.setStrokeWidth(stroke);
+        tp.setColor(0x40000000);
+        c.drawText(s, x, y, tp);
+        tp.setStyle(Paint.Style.FILL);
+        tp.setStrokeWidth(0);
+        if (clear) {
+            tp.setColor(0xFF000000);
+            tp.setXfermode(CUT);
+            c.drawText(s, x, y, tp);
+            tp.setXfermode(null);
+            c.restoreToCount(layer);
+        }
+        tp.setColor(color);
     }
 }

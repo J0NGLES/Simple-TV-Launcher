@@ -55,6 +55,7 @@ public class SettingsActivity extends Activity {
         svl.topMargin = Math.round(150 * s);
         root.addView(sv, svl);
         setContentView(root);
+        LiquidGlass.watch(getWindow());
         rootView = root;
 
         // из виджета погоды настройки открываются сразу в разделе «Погода», иначе — на списке разделов
@@ -133,10 +134,13 @@ public class SettingsActivity extends Activity {
     }
 
     private void buildHome() {
+        shapeRow = row(L.t("Форма плиток"), () -> L.t(Prefs.SHAPE_NAMES[prefs.tileShape()]), this::askShape);
         tileRow = row(L.t("Размер плиток"), () -> L.t(Prefs.TILE_NAMES[prefs.tileSize()]), this::askTile);
-        slider(L.t("Приложений в ряду"), 4, 12, 1, prefs::cols, prefs::setCols, "");
+        slider(L.t("Приложений в ряду"), 4, prefs.maxCols(), 1, prefs::cols, prefs::setCols, "");
         row(L.t("Положение сетки приложений"), () -> L.t(Prefs.PIN_NAMES[prefs.gridPin()]), () -> askOpt(L.t("Положение сетки приложений"), Prefs.PIN_NAMES, prefs.gridPin(), prefs::setGridPin));
         row(L.t("Выравнивание плиток"), () -> L.t(Prefs.ALIGN_NAMES[prefs.gridAlign()]), () -> askOpt(L.t("Выравнивание плиток"), Prefs.ALIGN_NAMES, prefs.gridAlign(), prefs::setGridAlign));
+        row(L.t("Положение названия и подписей"), () -> L.t(Prefs.LABEL_NAMES[prefs.labelPos()]), () -> askOpt(L.t("Положение названия и подписей"), Prefs.LABEL_NAMES, prefs.labelPos(), prefs::setLabelPos));
+        toggle(L.t("Скрыть подложку приложений"), prefs::noPanel, prefs::setNoPanel);
         toggle(L.t("Циклический переход по ряду"), prefs::cycle, prefs::setCycle);
         toggle(L.t("Показывать дату и день недели"), prefs::showDate, prefs::setShowDate);
         toggle(L.t("Отображать название выбранного приложения"), prefs::showTitle, prefs::setShowTitle);
@@ -161,7 +165,15 @@ public class SettingsActivity extends Activity {
         row(L.t("Сбросить порядок плиток (по алфавиту)"), () -> "", this::askResetOrder);
     }
 
-    private GlassView tileRow;
+    private GlassView tileRow, shapeRow;
+
+    private void askShape() {
+        GlassDialog.menu(this, L.t("Форма плиток"), Prefs.tr(Prefs.SHAPE_NAMES), prefs.tileShape(), i -> {
+            prefs.setTileShape(i);
+            build();            // у квадратных значков другой предел ползунка «Приложений в ряду»
+            if (shapeRow != null) shapeRow.requestFocus();
+        }).show();
+    }
 
     private void askTile() {
         GlassDialog.menu(this, L.t("Размер плиток"), Prefs.tr(Prefs.TILE_NAMES), prefs.tileSize(), i -> {
@@ -184,22 +196,35 @@ public class SettingsActivity extends Activity {
             recreate();
         }).show();
     }
+    /** Вид выделения мог смениться: на самой нажатой строке разница видна сразу. */
+    private void redrawFocus() {
+        android.view.View f = getCurrentFocus();
+        if (f instanceof GlassView) { ((GlassView) f).applyFocusScale(); f.invalidate(); }
+    }
+
     private void buildBg() {
         int mode = prefs.bgMode();
-        toggle(L.t("Свечение выбранной плитки"), prefs::glow, prefs::setGlow);
+        // эти два переключателя взаимоисключающие (см. Prefs); значения обеих строк обновляются после нажатия
+        toggle(L.t("Свечение выбранной плитки (несовместимо с анимациями)"), prefs::glow, v -> { prefs.setGlow(v); redrawFocus(); });
+        toggle(L.t("Анимации в стиле tvOS (несовместимо со свечением)"), prefs::liquid, v -> { prefs.setLiquid(v); redrawFocus(); });
+        row(L.t("Эффект стекла на главном экране"), () -> L.t(Prefs.GLASS_NAMES[prefs.glass()]), () -> askOpt(L.t("Эффект стекла на главном экране"), Prefs.GLASS_NAMES, prefs.glass(), prefs::setGlass));
+        toggle(L.t("Контрастные надписи"), prefs::readableText, v -> { prefs.setReadableText(v); bgView.syncLook(); });
         divider();
         modeRow = row(L.t("Тип заднего фона"), () -> L.t(Prefs.BG_MODES[prefs.bgMode()]), this::askMode);
         if (mode == 0) {
             row(L.t("Цвет градиента"), () -> L.t(Prefs.THEME_NAMES[prefs.theme()]), this::askColor);
         } else if (mode == 1) {
-            row(L.t("Выбрать изображение"), () -> Bg.has(this) ? L.t("задано") : L.t("не задано"), () ->
-                    startActivity(new Intent(this, BgPickerActivity.class)));
-            wpRow = row(L.t("Автосмена обоев: папка"), () -> prefs.wpBucket().isEmpty() ? L.t("Выкл") : prefs.wpName(), () ->
-                    startActivity(new Intent(this, BgPickerActivity.class).putExtra("folders", true)));
-            wpShown = prefs.wpActive();
-            if (wpShown) {
+            row(L.t("Выбрать изображение"), () -> Bg.has(this) ? L.t("задано") : L.t("не задано"), this::askImageSource);
+            wpRow = row(L.t("Автосмена обоев"), this::wpLabel, this::askWpSource);
+            wpShown = wpState();
+            if (prefs.wpActive()) {
                 row(L.t("Интервал смены обоев"), () -> L.t(Prefs.WP_NAMES[prefs.wpInterval()]), this::askWpInterval);
                 row(L.t("Следующее изображение"), () -> "", this::nextWallpaper);
+                if (prefs.wpOnline() >= 0) {
+                    row(L.t("Оставить текущие обои"), () -> "", this::keepWallpaper);
+                    row(L.t("Хранить обоев от автосмены"), () -> L.t(Prefs.WH_LIMIT_NAMES[prefs.whLimit()]), () ->
+                            askOpt(L.t("Хранить обоев от автосмены"), Prefs.WH_LIMIT_NAMES, prefs.whLimit(), prefs::setWhLimit));
+                }
             }
             slider(L.t("Затемнение"), 0, 80, 10, prefs::bgDim, prefs::setBgDim, " %");
             slider(L.t("Насыщенность"), 0, 100, 10, prefs::bgSat, prefs::setBgSat, " %");
@@ -312,7 +337,7 @@ public class SettingsActivity extends Activity {
             super.drawContent(c);
             float w = getWidth(), h = getHeight(), pad = h * 0.3f;
             float x0 = w * 0.46f, x1 = w - pad - h * 1.9f, y = h / 2f;
-            boolean dk = isFocused();
+            boolean dk = isFocused() && !UI.tvos;
             float f = (g.get() - min) / (float) (max - min);
             p.setShader(null);
             p.setStyle(android.graphics.Paint.Style.STROKE);
@@ -345,6 +370,10 @@ public class SettingsActivity extends Activity {
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         super.onRequestPermissionsResult(code, perms, res);
         if (code == 72) doBackup();
+        if (code == 73) {
+            if (res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) enableOnline(pendingTheme);
+            else toast(L.t("Без доступа к памяти обои не сохранить"));
+        }
     }
 
     private void doBackup() {
@@ -364,7 +393,6 @@ public class SettingsActivity extends Activity {
 
     private FrameLayout rootView;
     private android.widget.ImageView veil;
-    private boolean paused;
 
     private String versionName() {
         try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Throwable e) { return ""; }
@@ -412,27 +440,24 @@ public class SettingsActivity extends Activity {
         veil = null;
     }
 
-    @Override protected void onPause() {
-        super.onPause();
-        paused = true;
-    }
-
     @Override protected void onResume() {
         super.onResume();
-        paused = false;
         awaitHome = false;
         hideVeil();
         bgView.refresh(prefs.settingsAccent());     // например, после выбора другой картинки или видео
         bgView.syncLook();
-        // выбрали (или сбросили) папку автосмены — строки интервала и «Следующее изображение» появляются или исчезают
-        if (page == P_BG && prefs.bgMode() == 1 && prefs.wpActive() != wpShown) {
+        // включили, выключили или сменили источник автосмены — набор строк под ней другой
+        if (page == P_BG && prefs.bgMode() == 1 && wpState() != wpShown) {
             build();
             if (wpRow != null) wpRow.requestFocus();
         }
         if (!refreshers.isEmpty()) refresh();
     }
 
-    private boolean wpShown;
+    /** 0 автосмены нет, 1 из папки, 2 из интернета. */
+    private int wpState() { return !prefs.wpActive() ? 0 : prefs.wpOnline() >= 0 ? 2 : 1; }
+
+    private int wpShown;
     private GlassView wpRow;
 
     private String vpnLabel() {
@@ -524,12 +549,99 @@ public class SettingsActivity extends Activity {
         }).show();
     }
 
-    /** Ручная смена обоев: следующая картинка из выбранной папки, отсчёт интервала начинается заново. */
+    // ------------------------------------------------------------ откуда брать обои
+    private String wpLabel() {
+        int theme = prefs.wpOnline();
+        if (theme >= 0) return L.t("Онлайн: ") + L.t(Wallhaven.THEMES[theme][0]);
+        return prefs.wpBucket().isEmpty() ? L.t("Выкл") : prefs.wpName();
+    }
+
+    private String[] sources() {
+        return new String[]{L.t("Выбрать из локальной папки"), L.t("Выбрать из онлайн-каталога")};
+    }
+
+    private void askImageSource() {
+        GlassDialog.menu(this, L.t("Выбрать изображение"), sources(), i ->
+                startActivity(new Intent(this, i == 0 ? BgPickerActivity.class : WallhavenActivity.class))).show();
+    }
+
+    private void askWpSource() {
+        String[] items = sources();
+        if (!prefs.wpBucket().isEmpty() || prefs.wpOnline() >= 0) items = new String[]{items[0], items[1], L.t("Выключить автосмену")};
+        GlassDialog.menu(this, L.t("Автосмена обоев"), items, i -> {
+            if (i == 0) startActivity(new Intent(this, BgPickerActivity.class).putExtra("folders", true));
+            else if (i == 1) {
+                askWpTheme();
+            }
+            else {
+                prefs.clearWpFolder();
+                toast(L.t("Автосмена обоев выключена"));
+                rebuildWp();
+            }
+        }).show();
+    }
+
+    private int pendingTheme;
+    private boolean wpBusy;
+
+    /** Для онлайн-автосмены сетка не нужна: выбирается только тема, обои берутся из неё случайно. */
+    private void askWpTheme() {
+        String[] names = new String[Wallhaven.THEMES.length];
+        for (int i = 0; i < names.length; i++) names[i] = L.t(Wallhaven.THEMES[i][0]);
+        GlassDialog.menu(this, L.t("Случайные обои из темы"), names, Math.max(0, prefs.wpOnline()), this::enableOnline).show();
+    }
+
+    private void enableOnline(final int theme) {
+        if (android.os.Build.VERSION.SDK_INT >= 23 && android.os.Build.VERSION.SDK_INT <= 28
+                && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            pendingTheme = theme;
+            requestPermissions(new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 73);
+            return;
+        }
+        if (wpBusy) return;
+        wpBusy = true;
+        toast(L.t("Скачивание…"));
+        Weather.IO.execute(() -> {
+            // настройка включается, только если первые обои действительно скачались; иначе всё остаётся как было
+            final boolean ok = Wallhaven.fetchAndApply(this, prefs, theme);
+            if (ok) {
+                prefs.setWpOnline(theme);
+                prefs.setBgMode(1);
+                prefs.setWpLast(System.currentTimeMillis());
+            }
+            runOnUiThread(() -> {
+                wpBusy = false;
+                toast(ok ? L.t("Автосмена обоев включена") : L.t("Не удалось скачать обои. Проверьте интернет"));
+                if (!ok || isDestroyed()) return;
+                SoftVideo.forget(this);
+                bgView.refresh(prefs.settingsAccent());
+                rebuildWp();
+            });
+        });
+    }
+
+    /** Набор строк под «Автосменой» зависит от источника, поэтому раздел собирается заново. */
+    private void rebuildWp() {
+        if (page != P_BG) return;
+        build();
+        if (wpRow != null) wpRow.requestFocus();
+    }
+
+    private void keepWallpaper() {
+        String cur = prefs.raw().getString("whCur", "");
+        toast(Wallhaven.keep(prefs, cur) ? L.t("Эти обои не будут удаляться") : L.t("Эти обои и так не удаляются"));
+    }
+
+    /** Ручная смена обоев: следующая картинка, отсчёт интервала начинается заново. */
     private void nextWallpaper() {
-        if (!prefs.wpActive()) { toast(L.t("Сначала выберите папку для автосмены")); return; }
+        if (!prefs.wpActive()) { toast(L.t("Сначала включите автосмену")); return; }
+        if (wpBusy) return;
+        wpBusy = true;
+        if (prefs.wpOnline() >= 0) toast(L.t("Скачивание…"));
         Weather.IO.execute(() -> {
             final boolean ok = Bg.wpNext(this, prefs);
             runOnUiThread(() -> {
+                wpBusy = false;
                 toast(ok ? L.t("Обои сменены") : L.t("Не удалось сменить обои"));
                 if (ok) bgView.refresh(prefs.settingsAccent());
             });

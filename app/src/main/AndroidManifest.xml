@@ -76,6 +76,11 @@
             android:screenOrientation="landscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density" />
         <activity
+            android:name=".WallhavenActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density" />
+        <activity
             android:name=".BackupPickerActivity"
             android:exported="false"
             android:screenOrientation="landscape"

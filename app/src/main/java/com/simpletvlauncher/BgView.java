@@ -218,9 +218,13 @@ public class BgView extends View {
     }
 
     private int dimAlpha() {
-        int da = Math.round(new Prefs(getContext()).bgDim() * 2.55f);
-        return soft ? Math.round(Math.min(255, da + 0x1C) * 0.8f) : da;      // на остальных экранах затемнение на 20% слабее
+        int dim = new Prefs(getContext()).bgDim();
+        // погода, настройки, список приложений и прочие экраны темнее рабочего стола, чтобы светлые обои не слепили
+        if (soft) dim = Math.min(MENU_DIM_MAX, dim + MENU_DIM_EXTRA);
+        return Math.round(dim * 2.55f);
     }
+
+    private static final int MENU_DIM_EXTRA = 15,MENU_DIM_MAX = 90;      // в процентах; потолок — чтобы фон не стал совсем чёрным
 
     /** Готовит подложку для стеклянных меню (см. Backdrop). */
     void prepareStill() { stillReady(); }
@@ -254,7 +258,8 @@ public class BgView extends View {
 
     /** Затемнение или насыщенность изменили в настройках: сбросить готовые копии фона и перерисовать всё сразу. */
     public void syncLook() {
-        int sg = (dimAlpha() << 8) | sat() | (mode << 20);
+        if (main) Frost.light = new Prefs(getContext()).glass() == 0;
+        int sg = (dimAlpha() << 8) | sat() | (mode << 20) | (UI.contrast ? 1 << 28 : 0) | (main ? new Prefs(getContext()).glass() << 24 : 0);
         if (sg == lookSig) return;
         lookSig = sg;
         blurredBmp = null;
@@ -287,6 +292,7 @@ public class BgView extends View {
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
         super.onSizeChanged(w, h, ow, oh);
+        if (main) Frost.light = new Prefs(getContext()).glass() == 0;
         blurredBmp = null;
         build();
         prepareStill();
@@ -297,14 +303,16 @@ public class BgView extends View {
         if (!image() || backdrop == null || getWidth() == 0) return null;
         if (blurredBmp != null) return blurredBmp;
         int w = getWidth(), h = getHeight();
-        int bw = Math.max(8, w / 4), bh = Math.max(8, h / 4);
+        int fx = main ? new Prefs(getContext()).glass() : 1;
+        int down = fx == 0 ? 2 : 4;      // «лёгкий»: копия вдвое детальнее и без прохода размытия — фон лишь слегка смягчён
+        int bw = Math.max(8, w / down), bh = Math.max(8, h / down);
         Bitmap b = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
         c.drawColor(0xFF07050B);
         cover(c, backdrop, bw, bh);
         drawDim(c, bw, bh);
         // настоящее размытие (три прохода — по сути гауссово) на уменьшенной копии; при растяжении на экран блоков не видно
-        blurredBmp = Backdrop.blur(b, 1);
+        blurredBmp = fx == 0 ? b : Backdrop.blur(b, fx == 2 ? 4 : 1);      // «сильный» эффект стекла — то же размытие с широким окном
         return blurredBmp;
     }
 
@@ -355,8 +363,7 @@ public class BgView extends View {
 
     private final Paint dimPaint = new Paint();
 
-    /** Пользовательское затемнение отдельной кистью, чтобы не портить прозрачность кисти, которой рисуется картинка.
-     *  На остальных экранах добавляется ещё немного, чтобы текст читался на светлых кадрах. */
+    /** Затемнение отдельной кистью, чтобы не портить прозрачность кисти, которой рисуется картинка. */
     private void drawDim(Canvas c, int w, int h) {
         int da = dimAlpha();
         if (da <= 0) return;

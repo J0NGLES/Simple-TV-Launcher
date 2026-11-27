@@ -2,7 +2,7 @@
 
 **English** | [Русский](README.ru.md) | [Українська](README.ua.md)
 
-A lightweight tvOS-style Android TV launcher with a frosted-glass look: app tiles, weather, quick settings. No AndroidX, about 150 KB.
+A lightweight tvOS-style Android TV launcher with a frosted-glass look: app tiles, weather, quick settings. No AndroidX, about 175 KB.
 
 <img width="1920" height="1080" alt="photo_1_2026-11-20_23-49-09" src="https://github.com/user-attachments/assets/bdc50171-cd1f-4d2b-9eb2-0d3adc442961" />
 <img width="1920" height="1080" alt="photo_2_2026-11-20_23-49-10" src="https://github.com/user-attachments/assets/55f39c73-cec2-42e0-9300-83f936d00d95" />
@@ -23,8 +23,11 @@ A lightweight tvOS-style Android TV launcher with a frosted-glass look: app tile
 **Download:** [latest release](https://github.com/J0NGLES/Simple-TV-Launcher/releases/latest) · **Discussion (Russian):** [4PDA](https://4pda.to/forum/index.php?showtopic=1129772)
 
 ## Features
-- App tiles with sorting, hiding, favorites and a configurable grid: tile size (Auto to Huge), grid position (top / center / bottom), left or center alignment, optional cyclic navigation within a row
-- Wallpapers (image, video, gradient), adjustable blur, dimming and saturation, optional glow around the selected tile
+- App tiles with sorting, hiding, favorites and a configurable grid: tile size (Auto to Huge), grid position (top / center / bottom), fit-width or centered tile alignment, labels on the left / center / right, banner or square-icon tiles, optionally no panel behind apps, optional cyclic navigation within a row
+- Wallpapers (image, video, gradient), adjustable blur, dimming and saturation, optional glow around the selected tile, optional high-contrast text
+- Online wallpaper catalog from wallhaven.cc with themes; auto-change from a local folder or the online catalog (every 5 minutes at the most often), with a limit on stored downloads and protection for favorite wallpapers
+- The Home button returns the selection to the tile of the app you just left
+- Three glass effect levels, up to 15 square icons per row and optional tvOS-style animations (off by default): a glass highlight with springy motion across the home screen, menus, weather and settings
 - Weather (MET Norway, 7Timer, Bright Sky); metric / US / UK units
 - Network indicator with a crossed-out icon when there is no internet access
 - Voice search via a chosen app, VPN and DPI client picker
@@ -58,3 +61,5 @@ Tested on RockTek G2, Mecool KM2 Deluxe, Xiaomi TV A Pro 2026, Philips 50PUS8506
 
 ## License
 MIT, see [LICENSE](LICENSE).
+
+The tvOS-style animations are adapted from [CleanYourTV](https://github.com/Gathin23/cleanyourtv) (MIT, © 2026 Gathin), license text: [licenses.txt](app/src/main/assets/licenses.txt).

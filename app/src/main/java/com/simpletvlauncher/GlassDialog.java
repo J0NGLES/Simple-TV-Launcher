@@ -65,6 +65,7 @@ public class GlassDialog extends Dialog {
             w.setLayout(Math.round(widthRef * s) + 2 * pad, WindowManager.LayoutParams.WRAP_CONTENT);
             w.setGravity(Gravity.CENTER);
             w.setDimAmount(0.30f);
+            LiquidGlass.watch(w);
         }
         return d;
     }
@@ -122,12 +123,14 @@ public class GlassDialog extends Dialog {
             lp.bottomMargin = Math.round(10 * s);
             col.addView(r, lp);
         }
+        int room = UI.tvos ? Math.round(16 * s) : 0;
+        col.setPadding(room, room / 2, room, 0); col.setClipToPadding(false);
         ScrollView sv = new ScrollView(c);
         sv.setVerticalScrollBarEnabled(false);
         sv.setClipChildren(false);
         sv.addView(col);
         int maxH = Math.round(780 * s);
-        int need = items.length * Math.round(90 * s);
+        int need = items.length * Math.round(90 * s) + room / 2;
         LinearLayout holder = new LinearLayout(c);
         holder.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.min(maxH, need)));
         ref[0] = base(c, title, holder, s, Math.max(760, Math.min(1500, title.length() * 21)));     // длинный заголовок — шире окно
@@ -162,6 +165,7 @@ public class GlassDialog extends Dialog {
             lp.topMargin = Math.round(i == 0 ? 22 * s : 10 * s);
             col.addView(r, lp);
         }
+        if (UI.tvos) { col.setPadding(Math.round(16 * s), 0, Math.round(16 * s), 0); col.setClipToPadding(false); }
         ScrollView sv = new ScrollView(c);
         sv.setVerticalScrollBarEnabled(false);
         sv.setClipChildren(false);
@@ -188,6 +192,7 @@ public class GlassDialog extends Dialog {
         et.setTextSize(TypedValue.COMPLEX_UNIT_PX, 34 * s);
         et.setTextColor(0xFFFFFFFF);
         et.setHintTextColor(0x66FFFFFF);
+        if (UI.contrast) { float d = Math.max(1, Math.round(2 * s)); et.setShadowLayer(0.01f, d, d, 0xFF000000); }
         et.setInputType(InputType.TYPE_CLASS_TEXT);
         et.setImeOptions(EditorInfo.IME_ACTION_DONE);
         GradientDrawable eb = new GradientDrawable();
@@ -230,10 +235,11 @@ public class GlassDialog extends Dialog {
             material = true;
             blurBack = true;
             radius = 16 * UI.scale(c);
+            focusScale = 1.05f;
         }
         @Override protected void drawContent(android.graphics.Canvas cv) {
             int w = getWidth(), h = getHeight();
-            text(cv, label, w / 2f, h * (big ? 0.68f : 0.62f), h * (big ? 0.46f : 0.27f), isFocused() ? 0xFF1B1B22 : 0xF2FFFFFF,
+            text(cv, label, w / 2f, h * (big ? 0.68f : 0.62f), h * (big ? 0.46f : 0.27f), isFocused() && !UI.tvos ? 0xFF1B1B22 : 0xF2FFFFFF,
                     big ? 1 : 2, android.graphics.Paint.Align.CENTER, w * 0.92f);
         }
     }

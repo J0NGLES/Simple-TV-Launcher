@@ -17,13 +17,13 @@ import java.util.Set;
 
 /**
  * Полный список приложений.
- * manage = true: OK скрывает/показывает приложение; manage = false: OK запускает.
+ * OK запускает приложение; в режимах «скрыть сразу несколько» и «в избранное» — отмечает его.
  * Удерживайте OK — меню (открыть, скрыть/показать, удалить, о приложении).
  */
 public class ManageActivity extends Activity {
     private Prefs prefs;
     private float s;
-    private boolean manage, favMode, hideMode;
+    private boolean favMode, hideMode;
     private LinearLayout col;
     private Snap sv;
     private TextView sub;
@@ -33,13 +33,12 @@ public class ManageActivity extends Activity {
         super.onCreate(b);
         prefs = new Prefs(this);
         s = UI.scale(this);
-        manage = getIntent().getBooleanExtra("manage", false);
         favMode = getIntent().getBooleanExtra("fav", false);
         hideMode = getIntent().getBooleanExtra("hide", false);
         int W = getResources().getDisplayMetrics().widthPixels, H = getResources().getDisplayMetrics().heightPixels;
 
         FrameLayout root = new FrameLayout(this);
-        root.addView(new BgView(this, prefs.settingsAccent()), new FrameLayout.LayoutParams(-1, -1));
+        root.addView(bgView = new BgView(this, prefs.settingsAccent()), new FrameLayout.LayoutParams(-1, -1));
 
         TextView title = UI.text(this, L.t("Все приложения"), 58 * s, 0xFFFFFFFF, GlassView.MED);
         FrameLayout.LayoutParams tl = new FrameLayout.LayoutParams(Math.round(W - 192 * s), Math.round(80 * s));
@@ -81,6 +80,7 @@ public class ManageActivity extends Activity {
         svl.topMargin = Math.round(190 * s);
         root.addView(sv, svl);
         setContentView(root);
+        LiquidGlass.watch(getWindow());
 
         android.content.IntentFilter f = new android.content.IntentFilter();
         f.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -163,10 +163,12 @@ public class ManageActivity extends Activity {
         }
     }
     private int langV = L.version;
+    private BgView bgView;
 
     @Override protected void onResume() {
         super.onResume();
         if (L.version != langV) { recreate(); return; }      // язык сменили, пока экран был закрыт
+        bgView.syncLook();
         reload.run();
     }
 

@@ -16,7 +16,6 @@ import java.util.List;
 public class WeatherActivity extends Activity {
     private Prefs prefs;
     private float s;
-    private int W, H;
     private FrameLayout root, content;
     private TextView titleTv, subTv;
     private GlassView btnRefresh, btnSettings, detail;
@@ -28,11 +27,9 @@ public class WeatherActivity extends Activity {
         super.onCreate(b);
         prefs = new Prefs(this);
         s = UI.scale(this);
-        W = getResources().getDisplayMetrics().widthPixels;
-        H = getResources().getDisplayMetrics().heightPixels;
 
         root = new FrameLayout(this);
-        root.addView(new BgView(this, prefs.settingsAccent()), new FrameLayout.LayoutParams(-1, -1));
+        root.addView(bgView = new BgView(this, prefs.settingsAccent()), new FrameLayout.LayoutParams(-1, -1));
         content = new FrameLayout(this);
         root.addView(content, new FrameLayout.LayoutParams(-1, -1));
 
@@ -48,9 +45,11 @@ public class WeatherActivity extends Activity {
         btnRefresh.setOnClickListener(v -> load(true));
         put(root, btnRefresh, (1920 - 96 - 330 - 20 - 330), 48, 330, 80);
         setContentView(root);
+        LiquidGlass.watch(getWindow());
     }
 
     private int langV = L.version;
+    private BgView bgView;
 
     @Override protected void onResume() {
         super.onResume();
@@ -60,6 +59,7 @@ public class WeatherActivity extends Activity {
         FrameLayout.LayoutParams rl = (FrameLayout.LayoutParams) btnRefresh.getLayoutParams();
         rl.leftMargin = Math.round((1920 - 96 - 330 - (kid ? 0 : 20 + 330)) * s);
         btnRefresh.setLayoutParams(rl);
+        bgView.syncLook();
         data = Weather.load(prefs);
         if (!prefs.hasLocation()) {
             showMessage(L.t("Не выбран город"),
@@ -271,9 +271,5 @@ public class WeatherActivity extends Activity {
 
     private static String cap(String s) {
         return s == null || s.isEmpty() ? "" : Character.toUpperCase(s.charAt(0)) + s.substring(1);
-    }
-
-    private static String trim(double v) {
-        return v == Math.floor(v) ? String.valueOf((long) v) : String.format(java.util.Locale.US, "%.1f", v);
     }
 }

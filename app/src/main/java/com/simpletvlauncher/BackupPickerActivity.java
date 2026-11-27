@@ -55,6 +55,7 @@ public class BackupPickerActivity extends Activity {
         svl.topMargin = Math.round(182 * s);
         root.addView(sv, svl);
         setContentView(root);
+        LiquidGlass.watch(getWindow());
         start();
     }
 
@@ -183,19 +184,31 @@ public class BackupPickerActivity extends Activity {
     private void paintCard(Canvas c, GlassView v, String date, String time, Backup.Item it) {
         int w = v.getWidth(), h = v.getHeight();
         float pad = h * 0.1f;
-        v.text(c, date, pad, h * 0.22f, h * 0.15f, 0xFFFFFFFF, 2, Paint.Align.LEFT, w - 2 * pad);
-        v.text(c, time, pad, h * 0.40f, h * 0.17f, 0xF2FFFFFF, 0, Paint.Align.LEFT, w - 2 * pad);
+        v.text(c, date, pad, h * 0.19f, h * 0.15f, 0xFFFFFFFF, 2, Paint.Align.LEFT, w - 2 * pad);
+        v.text(c, time, pad, h * 0.37f, h * 0.17f, 0xF2FFFFFF, 0, Paint.Align.LEFT, w - 2 * pad);
         if (it.ok) {
-            float f = h * 0.075f;
-            v.text(c, it.bg, pad, h * 0.53f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
-            v.text(c, it.grid, pad, h * 0.65f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
-            v.text(c, it.pos, pad, h * 0.77f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
-            v.text(c, it.glow, pad, h * 0.89f, f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
+            float f = h * 0.072f;
+            String[] lines = {it.bg, it.grid, it.pos, it.glow};
+            for (int i = 0; i < lines.length; i++) v.text(c, lines[i], pad, h * (0.52f + i * 0.13f), fit(lines[i], f, w - 2 * pad), 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
         } else {
             v.text(c, L.t("Восстановить нельзя"), pad, h * 0.67f, h * 0.088f, 0xFFFF9A8A, 2, Paint.Align.LEFT, w - 2 * pad);
             v.text(c, L.t("Копия другой версии или повреждена"), pad, h * 0.85f, h * 0.075f, 0xB8FFFFFF, 1, Paint.Align.LEFT, w - 2 * pad);
         }
     }
+
+    private final Paint measure = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /** Размер шрифта, при котором строка описания помещается в карточку целиком, без многоточия. */
+    private float fit(String line, float size, float maxW) {
+        measure.setTypeface(GlassView.REG);
+        // ширина мелкого текста меняется не строго пропорционально кеглю, поэтому он уменьшается шагами с проверкой замером
+        for (int i = 0; i < 24; i++, size *= 0.97f) {
+            measure.setTextSize(size * UI.fs);       // GlassView.text умножает размер на общий размер шрифта
+            if (measure.measureText(line) <= maxW) break;
+        }
+        return size;
+    }
+
     private void confirm(final Backup.Item it, String when) {
         GlassDialog.menu(this, L.t("Восстановить настройки из копии от ") + when + "?", new String[]{L.t("ОК"), L.t("Отмена")}, i -> {
             if (i != 0) return;

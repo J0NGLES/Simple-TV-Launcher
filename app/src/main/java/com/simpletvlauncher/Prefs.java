@@ -32,6 +32,9 @@ public class Prefs {
         if (sp.contains("ambBlur")) sp.edit().remove("ambPat").remove("ambPat2").remove("ambPat3").remove("ambSpeed").remove("ambBlur").apply();    // настройки удалённого режима «Эмбиент»
         syncUnits();
         UI.fs = FONT_K[fontSize()];
+        UI.contrast = readableText();
+        if (liquid() && glow()) setGlow(false);     // оба могли остаться включёнными в настройках прежней сборки
+        UI.tvos = liquid();
     }
 
     public SharedPreferences raw() { return sp; }
@@ -74,6 +77,9 @@ public class Prefs {
     public void setShowTitle(boolean v) { sp.edit().putBoolean("showTitle", v).apply(); }
     public boolean showHdrs() { return sp.getBoolean("showHdrs", true); }
     public void setShowHdrs(boolean v) { sp.edit().putBoolean("showHdrs", v).apply(); }
+    /** «Контрастные надписи» (см. UI.contrast). */
+    public boolean readableText() { return sp.getBoolean("readableText", false); }
+    public void setReadableText(boolean v) { sp.edit().putBoolean("readableText", v).apply(); UI.contrast = v; }
     /** Возврат на главный экран лаунчера при выходе из сна (по умолчанию включён, если не выбран запуск приложения). */
     public boolean wakeHome() { return sp.getBoolean("wakeHome", false); }
     public void setWakeHome(boolean v) { sp.edit().putBoolean("wakeHome", v).apply(); }
@@ -85,29 +91,63 @@ public class Prefs {
     /** На какой загрузке устройства автозапуск уже отработал (повторный старт лаунчера на той же загрузке его не повторяет). */
     public String autoBootDone() { return sp.getString("autoBootDone", ""); }
     public void setAutoBootDone(String v) { sp.edit().putString("autoBootDone", v).apply(); }
-    public int cols() { return Math.max(4, Math.min(12, sp.getInt("cols", 7))); }
+    public int cols() { return Math.max(4, Math.min(maxCols(), sp.getInt("cols", 7))); }
+    /** Квадратные значки уже баннеров, поэтому их в ряду помещается больше. */
+    public int maxCols() { return tileShape() == 1 ? 15 : 12; }
     public void setCols(int v) { sp.edit().putInt("cols", v).apply(); }
 
     // ---- сетка приложений ----
-    /** Размер плиток: 0 авто (по числу в ряду), 1…5 — маленькие, небольшие, средние, крупные, огромные. */
-    public static final String[] TILE_NAMES = {"Авто", "Маленькие", "Небольшие", "Средние", "Крупные", "Огромные"};
-    public static final float[] TILE_W = {0, 160, 200, 260, 340, 450};      // ширина плитки в условных пикселях (экран 1920 на 1080)
-    public int tileSize() { return Math.max(0, Math.min(5, sp.getInt("tileSize", 0))); }
-    public void setTileSize(int v) { sp.edit().putInt("tileSize", v).apply(); }
+    /** Размер плиток: 0 авто (по числу в ряду), 1…6 — очень маленькие, маленькие, небольшие, средние, крупные, огромные. */
+    public static final String[] TILE_NAMES = {"Авто", "Очень маленькие", "Маленькие", "Небольшие", "Средние", "Крупные", "Огромные"};
+    public static final float[] TILE_W = {0, 128, 160, 200, 260, 340, 450};      // ширина плитки в условных пикселях (экран 1920 на 1080)
+    public int tileSize() {
+        int v = sp.contains("tileSize2") ? sp.getInt("tileSize2", 0) : tileSizeFromOld(sp.getInt("tileSize", 0));
+        return Math.max(0, Math.min(TILE_NAMES.length - 1, v));
+    }
+    public void setTileSize(int v) { sp.edit().putInt("tileSize2", v).apply(); }
+    /** До появления «очень маленьких» номера размеров были на единицу меньше (кроме «авто»). */
+    static int tileSizeFromOld(int old) { return old <= 0 ? 0 : old + 1; }
     /** Положение сетки по вертикали: 0 сверху, 1 по центру, 2 снизу. */
     public static final String[] PIN_NAMES = {"Сверху", "По центру", "Снизу"};
     public int gridPin() { return Math.max(0, Math.min(2, sp.getInt("gridPin", 0))); }
     public void setGridPin(int v) { sp.edit().putInt("gridPin", v).apply(); }
-    /** Выравнивание плиток в ряду: 0 по левому краю, 1 по центру, 2 по правому краю. */
-    public static final String[] ALIGN_NAMES = {"По левому краю", "По центру"};
+    /** Выравнивание плиток в ряду: 0 по ширине экрана, 1 по центру. На положение надписей не влияет. */
+    public static final String[] ALIGN_NAMES = {"По ширине", "По центру"};
     public int gridAlign() { return Math.max(0, Math.min(1, sp.getInt("gridAlign", 0) == 1 ? 1 : 0)); }
-    public void setGridAlign(int v) { sp.edit().putInt("gridAlign", v).apply(); }
+    public void setGridAlign(int v) {
+        // положение надписей ещё не сохранено отдельно: фиксируем то, что сейчас на экране, чтобы смена выравнивания его не сдвинула
+        int labels = labelPos();
+        sp.edit().putInt("gridAlign", v).putInt("labelPos", labels).apply();
+    }
+    /** Название приложения и подписи категорий: 0 слева, 1 по центру, 2 справа. */
+    public static final String[] LABEL_NAMES = {"Слева", "По центру", "Справа"};
+    // без сохранённого значения (настройки и копии прежних версий) надписи стоят так, как стояли там: по выравниванию плиток
+    public int labelPos() { return sp.contains("labelPos") ? Math.max(0, Math.min(2, sp.getInt("labelPos", 0))) : gridAlign(); }
+    public void setLabelPos(int v) { sp.edit().putInt("labelPos", v).apply(); }
+    /** Размытие под стеклянными элементами главного экрана: 0 лёгкое, 1 среднее (по умолчанию), 2 сильное. */
+    public static final String[] GLASS_NAMES = {"Лёгкий", "Средний", "Сильный"};
+    // в настройках и копиях хранится прежняя нумерация (0 — средний, 1 — сильный), «лёгкий» добавлен как 2
+    private static final int[] GLASS_STORED = {2, 0, 1};
+    public int glass() { int v = sp.getInt("glassFx", 0); return v == 2 ? 0 : v == 1 ? 2 : 1; }
+    public void setGlass(int v) { sp.edit().putInt("glassFx", GLASS_STORED[v]).apply(); }
     /** Переход по кругу внутри ряда: с последней плитки вправо — на первую, с первой влево — на последнюю. */
     public boolean cycle() { return sp.getBoolean("cycle", false); }
     public void setCycle(boolean v) { sp.edit().putBoolean("cycle", v).apply(); }
+    /** Анимации в стиле tvOS («жидкое стекло» за выделением на всех экранах). */
+    public boolean liquid() { return sp.getBoolean("liquid", false); }
+    /** Свечение плитки с этими анимациями несовместимо: включение одного выключает другое. */
+    public void setLiquid(boolean v) {
+        SharedPreferences.Editor e = sp.edit().putBoolean("liquid", v);
+        if (v) e.putBoolean("glow", false);
+        e.apply();
+        UI.tvos = v;
+    }
     /** Переливающееся свечение вокруг выбранной плитки вместо обычной белой обводки. */
     public boolean glow() { return sp.getBoolean("glow", false); }
-    public void setGlow(boolean v) { sp.edit().putBoolean("glow", v).apply(); }
+    public void setGlow(boolean v) {
+        if (v) setLiquid(false);
+        sp.edit().putBoolean("glow", v).apply();
+    }
 
     /** Размер шрифта: 0 мелкий, 1 обычный (как раньше), 2 крупный. */
     public static final String[] FONT_NAMES = {"Мелкий", "Обычный", "Крупный"};
@@ -121,6 +161,13 @@ public class Prefs {
     public int titleSize() { return Math.max(0, Math.min(4, sp.getInt("titleSz", 2))); }
     public void setTitleSize(int v) { sp.edit().putInt("titleSz", v).apply(); }
     public float titleK() { return TITLE_K[titleSize()]; }
+
+
+    /** Форма плиток на главном экране: 0 баннеры 16:9, 1 квадратные значки со скруглёнными углами. */
+    public static final String[] SHAPE_NAMES = {"Баннеры", "Квадратные значки"};
+    public static final float[] SQUARE_W = {0, 96, 120, 145, 175, 215, 260};      // сторона квадратной плитки для размеров из TILE_NAMES, в условных пикселях
+    public int tileShape() { return sp.getInt("tileShape", 0) == 1 ? 1 : 0; }
+    public void setTileShape(int v) { sp.edit().putInt("tileShape", v).apply(); }
 
     /** Избранные приложения («Все приложения» показывает их первыми): пакеты в порядке пользователя. */
     public List<String> favs() { return split(sp.getString("favs", "")); }
@@ -158,23 +205,42 @@ public class Prefs {
     }
 
     /** Кнопки «Все приложения» и «Лаунчер» стоят вверху, нижней панели «Настройки» нет. */
+    /** Без стеклянной подложки и рамки под плитками приложений: надписи и просветы тогда считаются по самим плиткам. */
+    public boolean noPanel() { return sp.getBoolean("noPanel", false); }
+    public void setNoPanel(boolean v) { sp.edit().putBoolean("noPanel", v).apply(); }
     public boolean panelTop() { return sp.getBoolean("panelTop", false); }
     public void setPanelTop(boolean v) { sp.edit().putBoolean("panelTop", v).apply(); }
 
     // ---- автосмена обоев ----
-    /** Интервалы смены, секунды: 10 с (для проверки), полчаса, час, 3, 6, 12, 24, 48 часов, неделя, две недели, месяц. */
-    public static final long[] WP_SEC = {10, 1800, 3600, 10800, 21600, 43200, 86400, 172800, 604800, 1209600, 2592000};
-    public static final String[] WP_NAMES = {"10 секунд (для проверки)", "30 минут", "1 час", "3 часа", "6 часов", "12 часов", "24 часа", "48 часов", "1 неделя", "2 недели", "1 месяц"};
-    public int wpInterval() { return Math.max(0, Math.min(WP_SEC.length - 1, sp.getInt("wpInt2", 6))); }
-    public void setWpInterval(int v) { sp.edit().putInt("wpInt2", v).apply(); }
+    /** Интервалы смены, секунды: 5 минут, полчаса, час, 3, 6, 12, 24, 48 часов, неделя, две недели, месяц. */
+    public static final long[] WP_SEC = {300, 1800, 3600, 10800, 21600, 43200, 86400, 172800, 604800, 1209600, 2592000};
+    public static final String[] WP_NAMES = {"5 минут", "30 минут", "1 час", "3 часа", "6 часов", "12 часов", "24 часа", "48 часов", "1 неделя", "2 недели", "1 месяц"};
+    public int wpInterval() {
+        // «wpInt4» — номер в нынешнем списке. В «wpInt3» первым был интервал 30 минут (сдвиг на один вперёд), в ещё более старом
+        // «wpInt2» — 10 секунд: его номера совпадают с нынешними, а сами 10 секунд превращаются в 5 минут. По умолчанию — 24 часа.
+        int v = sp.contains("wpInt4") ? sp.getInt("wpInt4", 6) : sp.contains("wpInt3") ? sp.getInt("wpInt3", 5) + 1 : sp.getInt("wpInt2", 6);
+        return Math.max(0, Math.min(WP_SEC.length - 1, v));
+    }
+    public void setWpInterval(int v) { sp.edit().putInt("wpInt4", v).apply(); }
     public long wpIntervalMs() { return WP_SEC[wpInterval()] * 1000L; }
     /** Папка с обоями для автосмены: идентификатор папки в MediaStore и её название; пусто — автосмена выключена. */
     public String wpBucket() { return sp.getString("wpBucket", ""); }
     public String wpName() { return sp.getString("wpName", ""); }
     public void setWpFolder(String bucket, String name) {
-        sp.edit().putString("wpBucket", bucket).putString("wpName", name).remove("wpSeen").remove("wpCur").apply();
+        sp.edit().putString("wpBucket", bucket).putString("wpName", name).remove("wpSeen").remove("wpCur").remove("wpOnline").apply();
     }
-    public void clearWpFolder() { sp.edit().remove("wpBucket").remove("wpName").remove("wpSeen").remove("wpCur").apply(); }
+    /** Выключает автосмену, из какого бы источника она ни шла. */
+    public void clearWpFolder() { sp.edit().remove("wpBucket").remove("wpName").remove("wpSeen").remove("wpCur").remove("wpOnline").apply(); }
+    /** Тема онлайн-автосмены (номер в Wallhaven.THEMES); -1 — обои берутся не из интернета. */
+    public int wpOnline() { int v = sp.getInt("wpOnline", -1); return v >= 0 && v < Wallhaven.THEMES.length ? v : -1; }
+    public void setWpOnline(int theme) {
+        sp.edit().putInt("wpOnline", theme).remove("wpBucket").remove("wpName").remove("wpSeen").remove("wpCur").apply();
+    }
+    /** Сколько обоев, скачанных автосменой, хранить (0 — без ограничения). Скачанные вручную не считаются и не удаляются. */
+    public static final int[] WH_LIMITS = {20, 50, 100, 0};
+    public static final String[] WH_LIMIT_NAMES = {"20", "50", "100", "Без ограничения"};
+    public int whLimit() { return Math.max(0, Math.min(WH_LIMITS.length - 1, sp.getInt("whLimit", 1))); }
+    public void setWhLimit(int v) { sp.edit().putInt("whLimit", v).apply(); }
     /** Какие картинки папки уже были обоями в текущем круге (id через запятую) и какая стоит сейчас. */
     public String wpSeen() { return sp.getString("wpSeen", ""); }
     public void setWpSeen(String v) { sp.edit().putString("wpSeen", v).apply(); }
@@ -182,8 +248,8 @@ public class Prefs {
     public void setWpCur(long v) { sp.edit().putLong("wpCur", v).apply(); }
     public long wpLast() { return sp.getLong("wpLast", 0); }
     public void setWpLast(long v) { sp.edit().putLong("wpLast", v).apply(); }
-    /** Автосмена работает: папка выбрана и тип фона «Изображение». */
-    public boolean wpActive() { return !wpBucket().isEmpty() && bgMode() == 1; }
+    /** Автосмена работает: выбрана папка или онлайн-тема и тип фона «Изображение». */
+    public boolean wpActive() { return (!wpBucket().isEmpty() || wpOnline() >= 0) && bgMode() == 1; }
 
     /** Файловый менеджер для кнопки флешки (пакет); пусто — спросить при нажатии. */
 
